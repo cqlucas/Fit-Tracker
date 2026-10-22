@@ -140,6 +140,13 @@ export interface TranslationSchema {
     lunch: string;
     dinner: string;
     snack: string;
+    periodCustom: string;
+    customDateRange: string;
+    startDate: string;
+    endDate: string;
+    apply: string;
+    invalidDate: string;
+    singleDateHint: string;
     emptyTitle: string;
     emptySubtitle: string;
   };
@@ -290,6 +297,13 @@ export const translations: Record<AppLanguage, TranslationSchema> = {
       lunch: 'Almoço',
       dinner: 'Jantar',
       snack: 'Lanches',
+      periodCustom: 'Personalizado',
+      customDateRange: 'Intervalo de Datas',
+      startDate: 'Data Início',
+      endDate: 'Data Fim',
+      apply: 'Aplicar',
+      invalidDate: 'Data inválida (use AAAA-MM-DD ou DD/MM/AAAA)',
+      singleDateHint: 'Para consultar um único dia, informe a mesma data no início e no fim.',
       emptyTitle: 'Sem dados suficientes',
       emptySubtitle: 'Registre suas refeições e hidratação para acompanhar sua evolução.',
     },
@@ -438,6 +452,13 @@ export const translations: Record<AppLanguage, TranslationSchema> = {
       lunch: 'Lunch',
       dinner: 'Dinner',
       snack: 'Snacks',
+      periodCustom: 'Custom',
+      customDateRange: 'Date Range',
+      startDate: 'Start Date',
+      endDate: 'End Date',
+      apply: 'Apply',
+      invalidDate: 'Invalid date (use YYYY-MM-DD or MM/DD/YYYY)',
+      singleDateHint: 'For a single day, set both start and end to the same date.',
       emptyTitle: 'Insufficient data',
       emptySubtitle: 'Start logging your meals and hydration to view trends and charts.',
     },

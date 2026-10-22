@@ -5,25 +5,30 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   logsRepository,
   type AnalyticsData,
-  type AnalyticsPeriod,
+  type AnalyticsPeriodInput,
 } from '@/repositories/logs.repository';
 
 export interface UseAnalyticsDataResult {
-  period: AnalyticsPeriod;
-  setPeriod: (period: AnalyticsPeriod) => void;
+  period: AnalyticsPeriodInput;
+  setPeriod: (period: AnalyticsPeriodInput) => void;
   data: AnalyticsData | null;
   isLoading: boolean;
   isRefreshing: boolean;
   refresh: () => Promise<void>;
 }
 
-export function useAnalyticsData(initialPeriod: AnalyticsPeriod = '7d'): UseAnalyticsDataResult {
-  const [period, setPeriod] = useState<AnalyticsPeriod>(initialPeriod);
+export function useAnalyticsData(initialPeriod: AnalyticsPeriodInput = '7d'): UseAnalyticsDataResult {
+  const [period, setPeriod] = useState<AnalyticsPeriodInput>(initialPeriod);
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const isMountedRef = useRef(true);
+
+  const periodKey =
+    typeof period === 'string'
+      ? period
+      : `${period.startDateKey}_${period.endDateKey}`;
 
   const fetchData = useCallback(
     async (isManualRefresh = false) => {
@@ -46,7 +51,8 @@ export function useAnalyticsData(initialPeriod: AnalyticsPeriod = '7d'): UseAnal
         }
       }
     },
-    [period],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [periodKey],
   );
 
   // Escuta mutações no SQLite local (novos logs, updates, exclusões ou metas alteradas)
