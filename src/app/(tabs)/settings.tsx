@@ -1,40 +1,202 @@
-import { Settings } from 'lucide-react-native';
-import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { useFocusEffect, useRouter } from 'expo-router';
+import React, { useCallback, useState } from 'react';
+import {
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Typography } from '@/components/ui/Typography';
+import { CalorieGoalCard } from '@/components/settings/CalorieGoalCard';
+import { IntroBanner } from '@/components/settings/IntroBanner';
+import { LanguageSelectorCard } from '@/components/settings/LanguageSelectorCard';
+import { ProteinGoalCard } from '@/components/settings/ProteinGoalCard';
+import { SaveGoalsButton } from '@/components/settings/SaveGoalsButton';
+import { SettingsHeader } from '@/components/settings/SettingsHeader';
+import { StaticReminderCard } from '@/components/settings/StaticReminderCard';
+import { StatusSyncCard } from '@/components/settings/StatusSyncCard';
+import { WaterGoalCard } from '@/components/settings/WaterGoalCard';
+import { DEFAULT_GOALS, goalsRepository } from '@/repositories/goals.repository';
 import { colors, spacing } from '@/theme/tokens';
 
 export default function SettingsScreen() {
+  const router = useRouter();
+
+  // Estados locais do formulário de metas
+  const [proteinInput, setProteinInput] = useState('160');
+  const [waterInput, setWaterInput] = useState('3000');
+  const [language, setLanguage] = useState<'pt' | 'en'>('pt');
+
+  const [isSaving, setIsSaving] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
+
+  const isPt = language === 'pt';
+
+  // Carrega as metas do banco local SQLite ao focar na tela
+  useFocusEffect(
+    useCallback(() => {
+      let isMounted = true;
+      goalsRepository
+        .get()
+        .then((current) => {
+          if (isMounted) {
+            setProteinInput(String(current.proteinGoal));
+            setWaterInput(String(current.waterGoal));
+            setLanguage(current.language ?? 'pt');
+          }
+        })
+        .catch((err) => {
+          if (__DEV__) console.warn('[SettingsScreen] Erro ao carregar metas:', err);
+        });
+
+      return () => {
+        isMounted = false;
+      };
+    }, []),
+  );
+
+  // Reseta para os valores padrões de fábrica
+  const handleReset = () => {
+    setProteinInput(String(DEFAULT_GOALS.proteinGoal));
+    setWaterInput(String(DEFAULT_GOALS.waterGoal));
+    setLanguage(DEFAULT_GOALS.language);
+  };
+
+  // Salva no SQLite com validações estritas
+  const handleSave = async () => {
+    const proteinNum = parseInt(proteinInput, 10);
+    const waterNum = parseInt(waterInput, 10);
+
+    if (isNaN(proteinNum) || proteinNum <= 0) {
+      Alert.alert(
+        isPt ? 'Valor Inválido' : 'Invalid Value',
+        isPt
+          ? 'Por favor, insira uma meta válida de proteína (maior que 0g).'
+          : 'Please enter a valid protein target (greater than 0g).',
+      );
+      return;
+    }
+
+    if (isNaN(waterNum) || waterNum <= 0) {
+      Alert.alert(
+        isPt ? 'Valor Inválido' : 'Invalid Value',
+        isPt
+          ? 'Por favor, insira uma meta válida de água (maior que 0ml).'
+          : 'Please enter a valid water target (greater than 0ml).',
+      );
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await goalsRepository.update({
+        proteinGoal: proteinNum,
+        waterGoal: waterNum,
+        language,
+      });
+
+      setIsSaved(true);
+
+      // Feedback visual por 2 segundos antes de liberar
+      setTimeout(() => {
+        setIsSaved(false);
+      }, 2000);
+    } catch (err) {
+      Alert.alert(
+        isPt ? 'Erro ao Salvar' : 'Error Saving',
+        isPt
+          ? 'Não foi possível persistir as metas no banco local.'
+          : 'Could not persist goals to local database.',
+      );
+      if (__DEV__) console.warn('[SettingsScreen] Erro ao salvar:', err);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.push('/(tabs)');
+    }
+  };
+
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
-        <Settings size={48} color={colors.onSurfaceVariant} />
-        <Typography variant="headlineMd" style={styles.title}>
-          Settings & Goals
-        </Typography>
-        <Typography variant="bodyMd" color={colors.onSurfaceVariant} center>
-          Ajuste suas metas de proteína, água e calorias ou conecte sua conta Supabase.
-        </Typography>
-      </View>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoid}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.contentContainer}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled">
+          {/* Cabeçalho com botão voltar e resetar */}
+          <SettingsHeader onBack={handleBack} onReset={handleReset} isPt={isPt} />
+
+          {/* Banner explicativo com glow sutil */}
+          <IntroBanner isPt={isPt} />
+
+          {/* 1. Meta de Proteína: input numérico livre */}
+          <ProteinGoalCard
+            value={proteinInput}
+            onChangeValue={setProteinInput}
+            isPt={isPt}
+          />
+
+          {/* 2. Meta de Água: 100% customizável em ml, sem presets limitados */}
+          <WaterGoalCard
+            value={waterInput}
+            onChangeValue={setWaterInput}
+            isPt={isPt}
+          />
+
+          {/* 3. Meta Calórica: Recurso futuro bloqueado com badge "Em breve" */}
+          <CalorieGoalCard currentGoal={2200} isPt={isPt} />
+
+          {/* 4. Seletor de Idioma: Alternar entre PT-BR e EN */}
+          <LanguageSelectorCard
+            language={language}
+            onSelectLanguage={setLanguage}
+          />
+
+          {/* 5. Lembrete Estático: Prévia visual sem push nativo */}
+          <StaticReminderCard isPt={isPt} />
+
+          {/* Status de Sincronização Telemetry */}
+          <StatusSyncCard isPt={isPt} />
+
+          {/* Botão de Ação Salvar com feedback reativo */}
+          <SaveGoalsButton
+            onPress={handleSave}
+            isLoading={isSaving}
+            isSaved={isSaved}
+            isPt={isPt}
+          />
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
     backgroundColor: colors.background,
   },
-  content: {
+  keyboardAvoid: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: spacing.xl,
-    gap: spacing.md,
   },
-  title: {
-    fontWeight: '700',
+  scrollView: {
+    flex: 1,
+  },
+  contentContainer: {
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.xs,
+    paddingBottom: 110, // Espaço extra para a TabBar flutuante não sobrepor o botão de salvar
+    gap: spacing.md,
   },
 });

@@ -21,6 +21,7 @@ const MIGRATIONS: readonly string[] = [
     protein_goal  INTEGER NOT NULL DEFAULT 160,
     water_goal    INTEGER NOT NULL DEFAULT 3000,
     calories_goal INTEGER NOT NULL DEFAULT 2200,
+    language      TEXT NOT NULL DEFAULT 'pt',
     updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     is_synced     INTEGER NOT NULL DEFAULT 0
   );
@@ -52,8 +53,8 @@ const MIGRATIONS: readonly string[] = [
   CREATE INDEX IF NOT EXISTS idx_food_logs_date_key  ON food_logs (date_key);
   CREATE INDEX IF NOT EXISTS idx_food_logs_is_synced ON food_logs (is_synced);
   `,
-  // v2 — exemplo futuro:
-  // `ALTER TABLE food_logs ADD COLUMN notes TEXT;`,
+  // v2 — adição de language em user_goals
+  `ALTER TABLE user_goals ADD COLUMN language TEXT NOT NULL DEFAULT 'pt';`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

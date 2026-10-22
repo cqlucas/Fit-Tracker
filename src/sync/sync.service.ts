@@ -74,6 +74,7 @@ const goalsToRemote = (r: UserGoals) => ({
   protein_goal: r.proteinGoal,
   water_goal: r.waterGoal,
   calories_goal: r.caloriesGoal,
+  language: r.language,
   updated_at: r.updatedAt,
 });
 
@@ -134,6 +135,7 @@ const adapters: TableAdapter[] = [
             proteinGoal: num(r.protein_goal),
             waterGoal: num(r.water_goal),
             caloriesGoal: num(r.calories_goal),
+            language: r.language === 'en' ? ('en' as const) : ('pt' as const),
             updatedAt: iso(r.updated_at),
             isSynced: true,
           };

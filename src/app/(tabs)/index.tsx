@@ -16,50 +16,47 @@ import { QuickLogCTA } from '@/components/dashboard/QuickLogCTA';
 import { RecentMealCard } from '@/components/dashboard/RecentMealCard';
 import { WeeklyConsistencyCard } from '@/components/dashboard/WeeklyConsistencyCard';
 import { Badge } from '@/components/ui/Badge';
+import {
+  SkeletonCaloriesCard,
+  SkeletonDonutRow,
+  SkeletonWeeklyCard,
+} from '@/components/ui/Skeleton';
 import { Typography } from '@/components/ui/Typography';
-import { useDashboardData } from '@/hooks/use-dashboard-data';
+import { useDashboardData } from '@/hooks/useDashboardData';
 import { colors, spacing } from '@/theme/tokens';
 
 export default function HomeScreen() {
   const router = useRouter();
   const {
-    loading,
-    dailySummary,
-    weeklyConsistency,
-    recentMeal,
+    isLoading,
     goals,
+    todayTotals,
+    weeklyStats,
+    recentMeal,
     weeklyAverage,
     formatDaysForMacro,
     refresh,
   } = useDashboardData();
 
-  // Data formatada para o cabeçalho (ex: "Today, Oct 24" e "Thu")
+  const isPt = goals.language === 'pt';
+
+  // Data formatada para o cabeçalho baseada no idioma selecionado
   const { dateTitle, dayOfWeek } = useMemo(() => {
     const now = new Date();
-    const month = now.toLocaleDateString('en-US', { month: 'short' });
+    const locale = isPt ? 'pt-BR' : 'en-US';
+    const month = now.toLocaleDateString(locale, { month: 'short' });
     const day = now.getDate();
-    const weekday = now.toLocaleDateString('en-US', { weekday: 'short' });
+    const weekday = now.toLocaleDateString(locale, { weekday: 'short' });
+    const prefix = isPt ? 'Hoje' : 'Today';
+
     return {
-      dateTitle: `Today, ${month} ${day}`,
-      dayOfWeek: weekday,
+      dateTitle: `${prefix}, ${month} ${day}`,
+      dayOfWeek: weekday.charAt(0).toUpperCase() + weekday.slice(1),
     };
-  }, []);
-
-  // Valores padrão / do banco para fallback imediato
-  const proteinConsumed = dailySummary?.protein.consumed ?? 118;
-  const proteinGoal = goals?.proteinGoal ?? dailySummary?.protein.goal ?? 160;
-
-  const waterConsumed = dailySummary?.water.consumed ?? 2250;
-  const waterGoal = goals?.waterGoal ?? dailySummary?.water.goal ?? 3000;
-
-  const caloriesConsumed = dailySummary?.calories.consumed ?? 1820;
-  const caloriesGoal = goals?.caloriesGoal ?? dailySummary?.calories.goal ?? 2200;
+  }, [isPt]);
 
   const proteinDays = formatDaysForMacro('protein');
   const waterDays = formatDaysForMacro('water');
-
-  const proteinHitCount = weeklyConsistency?.proteinDaysMet ?? 5;
-  const waterHitCount = weeklyConsistency?.waterDaysMet ?? 6;
 
   const handleQuickLog = () => {
     router.push('/(tabs)/quick-log');
@@ -77,7 +74,7 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
-            refreshing={loading}
+            refreshing={isLoading}
             onRefresh={refresh}
             tintColor={colors.primary}
             colors={[colors.primary]}
@@ -87,43 +84,51 @@ export default function HomeScreen() {
         <HomeHeader
           dateTitle={dateTitle}
           dayOfWeek={dayOfWeek}
-          streakDays={18}
+          streakDays={weeklyStats.proteinDaysHit + weeklyStats.waterDaysHit > 0 ? 7 : 1}
           onPressTune={handleSettings}
           onPressSettings={handleSettings}
           onPressNotifications={() => {}}
         />
 
         {/* Hero Section: Dual Macro Donut Rings (Proteína & Água) */}
-        <View style={styles.dualDonutRow}>
-          <DonutChartCard
-            label="Protein"
-            current={proteinConsumed}
-            goal={proteinGoal}
-            unit="g"
-            color={colors.primary}
-            glow="primary"
-          />
-          <DonutChartCard
-            label="Hydration"
-            current={waterConsumed}
-            goal={waterGoal}
-            unit="ml"
-            color={colors.secondary}
-            glow="secondary"
-            formatValue={(val) => {
-              if (val >= 1000) {
-                return `${(val / 1000).toFixed(1)}L`;
-              }
-              return `${val}ml`;
-            }}
-          />
-        </View>
+        {isLoading ? (
+          <SkeletonDonutRow />
+        ) : (
+          <View style={styles.dualDonutRow}>
+            <DonutChartCard
+              label={isPt ? 'Proteína' : 'Protein'}
+              current={todayTotals.proteinConsumed}
+              goal={goals.proteinGoal}
+              unit="g"
+              color={colors.primary}
+              glow="primary"
+            />
+            <DonutChartCard
+              label={isPt ? 'Hidratação' : 'Hydration'}
+              current={todayTotals.waterConsumed}
+              goal={goals.waterGoal}
+              unit="ml"
+              color={colors.secondary}
+              glow="secondary"
+              formatValue={(val) => {
+                if (val >= 1000) {
+                  return `${(val / 1000).toFixed(1)}L`;
+                }
+                return `${val}ml`;
+              }}
+            />
+          </View>
+        )}
 
         {/* Progresso de Calorias e Déficit Energético */}
-        <CaloriesProgressCard
-          consumed={caloriesConsumed}
-          goal={caloriesGoal}
-        />
+        {isLoading ? (
+          <SkeletonCaloriesCard />
+        ) : (
+          <CaloriesProgressCard
+            consumed={todayTotals.caloriesConsumed}
+            goal={goals.caloriesGoal}
+          />
+        )}
 
         {/* Botão de Ação Rápida de Registro */}
         <QuickLogCTA onPress={handleQuickLog} />
@@ -134,71 +139,75 @@ export default function HomeScreen() {
             <View style={styles.sectionTitleRow}>
               <Award size={18} color={colors.primary} />
               <Typography variant="labelMd" style={styles.sectionTitle}>
-                Weekly Consistency
+                {isPt ? 'Consistência Semanal' : 'Weekly Consistency'}
               </Typography>
             </View>
-            <Badge label="Last 7 Days" variant="subtle" />
+            <Badge label={isPt ? 'Últimos 7 Dias' : 'Last 7 Days'} variant="subtle" />
           </View>
 
-          {/* Consistência de Proteína */}
-          <WeeklyConsistencyCard
-            title="Protein Target"
-            subtitle={`Min daily threshold ${proteinGoal}g`}
-            hitCount={proteinHitCount}
-            totalDays={7}
-            averageText={`Avg. ${weeklyAverage.protein || 152}g/d`}
-            icon={<Dumbbell size={16} color={colors.primary} strokeWidth={2.5} />}
-            accentColor={colors.primary}
-            containerColor={colors.primaryContainer}
-            days={proteinDays.length > 0 ? proteinDays : defaultMockDays('protein')}
-          />
+          {isLoading ? (
+            <>
+              <SkeletonWeeklyCard />
+              <SkeletonWeeklyCard />
+            </>
+          ) : (
+            <>
+              {/* Consistência de Proteína */}
+              <WeeklyConsistencyCard
+                title={isPt ? 'Meta de Proteína' : 'Protein Target'}
+                subtitle={
+                  isPt
+                    ? `Mínimo diário de ${goals.proteinGoal}g`
+                    : `Min daily threshold ${goals.proteinGoal}g`
+                }
+                hitCount={weeklyStats.proteinDaysHit}
+                totalDays={weeklyStats.totalDays}
+                averageText={
+                  isPt
+                    ? `Média: ${weeklyAverage.protein || 0}g/d`
+                    : `Avg. ${weeklyAverage.protein || 0}g/d`
+                }
+                icon={<Dumbbell size={16} color={colors.primary} strokeWidth={2.5} />}
+                accentColor={colors.primary}
+                containerColor={colors.primaryContainer}
+                days={proteinDays}
+              />
 
-          {/* Consistência de Hidratação */}
-          <WeeklyConsistencyCard
-            title="Hydration Streak"
-            subtitle="Active streak"
-            hitCount={waterHitCount}
-            totalDays={7}
-            averageText={`Avg. ${weeklyAverage.water !== '0.0' ? weeklyAverage.water : '3.1'}L/d`}
-            icon={<Droplets size={16} color={colors.secondary} strokeWidth={2.5} />}
-            accentColor={colors.secondary}
-            containerColor={colors.secondaryContainer}
-            days={waterDays.length > 0 ? waterDays : defaultMockDays('water')}
-          />
+              {/* Consistência de Hidratação */}
+              <WeeklyConsistencyCard
+                title={isPt ? 'Sequência de Água' : 'Hydration Streak'}
+                subtitle={isPt ? 'Consistência diária' : 'Active streak'}
+                hitCount={weeklyStats.waterDaysHit}
+                totalDays={weeklyStats.totalDays}
+                averageText={
+                  isPt
+                    ? `Média: ${weeklyAverage.water !== '0.0' ? weeklyAverage.water : '0.0'}L/d`
+                    : `Avg. ${weeklyAverage.water !== '0.0' ? weeklyAverage.water : '0.0'}L/d`
+                }
+                icon={<Droplets size={16} color={colors.secondary} strokeWidth={2.5} />}
+                accentColor={colors.secondary}
+                containerColor={colors.secondaryContainer}
+                days={waterDays}
+              />
+            </>
+          )}
         </View>
 
         {/* Snapshot da Última Refeição Registrada */}
-        <View style={styles.recentMealSection}>
-          <RecentMealCard
-            name={recentMeal ? recentMeal.name : 'Lunch • Post-Workout Bowl'}
-            proteinG={recentMeal ? recentMeal.proteinG : 48}
-            caloriesKcal={recentMeal ? recentMeal.caloriesKcal : 620}
-            timeString={recentMeal ? 'Recent Log' : 'Logged 1:15 PM'}
-            onPress={handleQuickLog}
-          />
-        </View>
+        {!isLoading && recentMeal ? (
+          <View style={styles.recentMealSection}>
+            <RecentMealCard
+              name={recentMeal.name}
+              proteinG={recentMeal.proteinG}
+              caloriesKcal={recentMeal.caloriesKcal}
+              timeString={isPt ? 'Registro recente' : 'Recent Log'}
+              onPress={handleQuickLog}
+            />
+          </View>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );
-}
-
-// Mock fallback caso ainda não haja dados de 7 dias no banco
-function defaultMockDays(type: 'protein' | 'water') {
-  return [
-    { dayLabel: 'M', dateKey: '1', isHit: true, isToday: false, percent: 100 },
-    { dayLabel: 'T', dateKey: '2', isHit: true, isToday: false, percent: 100 },
-    { dayLabel: 'W', dateKey: '3', isHit: true, isToday: false, percent: 100 },
-    {
-      dayLabel: 'T',
-      dateKey: '4',
-      isHit: type === 'water',
-      isToday: true,
-      percent: type === 'protein' ? 74 : 100,
-    },
-    { dayLabel: 'F', dateKey: '5', isHit: true, isToday: false, percent: 100 },
-    { dayLabel: 'S', dateKey: '6', isHit: true, isToday: false, percent: 100 },
-    { dayLabel: 'S', dateKey: '7', isHit: false, isToday: false, percent: 0 },
-  ];
 }
 
 const styles = StyleSheet.create({

@@ -6,13 +6,14 @@ import { nowIso } from '@/utils/date';
 
 import { assertPositiveInt } from './validation';
 
-export type Goals = Pick<UserGoals, 'proteinGoal' | 'waterGoal' | 'caloriesGoal'>;
+export type Goals = Pick<UserGoals, 'proteinGoal' | 'waterGoal' | 'caloriesGoal' | 'language'>;
 export type UpdateGoalsInput = Partial<Goals>;
 
 export const DEFAULT_GOALS: Goals = {
   proteinGoal: 160,
   waterGoal: 3000,
   caloriesGoal: 2200,
+  language: 'pt',
 };
 
 /**
@@ -30,6 +31,7 @@ async function get(): Promise<Goals> {
     proteinGoal: row.proteinGoal,
     waterGoal: row.waterGoal,
     caloriesGoal: row.caloriesGoal,
+    language: row.language ?? 'pt',
   };
 }
 
@@ -46,6 +48,12 @@ async function update(input: UpdateGoalsInput): Promise<UserGoals> {
   if (input.caloriesGoal !== undefined) {
     assertPositiveInt(input.caloriesGoal, 'caloriesGoal');
     patch.caloriesGoal = input.caloriesGoal;
+  }
+  if (input.language !== undefined) {
+    if (input.language !== 'pt' && input.language !== 'en') {
+      throw new Error('Invalid language');
+    }
+    patch.language = input.language;
   }
 
   // Upsert: resiliente caso a linha tenha sido removida por qualquer motivo.
