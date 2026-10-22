@@ -99,7 +99,6 @@ const foodToRemote = (r: FoodLog) => ({
 });
 
 const str = (v: unknown) => String(v);
-const strOrNull = (v: unknown) => (v == null ? null : String(v));
 const num = (v: unknown) => Number(v);
 
 /** Normaliza timestamptz do Postgres ('...+00:00') para o mesmo formato ISO usado localmente ('...Z'). */

@@ -65,10 +65,9 @@ create index if not exists idx_water_logs_date_key on public.water_logs (date_ke
 create index if not exists idx_food_logs_date_key  on public.food_logs  (date_key);
 
 -- RLS -------------------------------------------------------------------------
--- ⚠️ Políticas abaixo liberam acesso a usuários AUTENTICADOS (app pessoal, 1 usuário).
--- Faça login (ex.: e-mail/senha ou anônimo) antes de sincronizar.
--- Se um dia virar multiusuário: adicione `user_id uuid default auth.uid()` e
--- troque `true` por `user_id = auth.uid()`.
+-- ⚠️ Políticas para app pessoal de 1 usuário (permite 'anon' e 'authenticated').
+-- Se no futuro virar multiusuário com login: adicione `user_id uuid default auth.uid()`
+-- e restrinja para `user_id = auth.uid()`.
 alter table public.user_goals enable row level security;
 alter table public.water_logs enable row level security;
 alter table public.food_logs  enable row level security;
@@ -77,6 +76,6 @@ drop policy if exists "owner_all" on public.user_goals;
 drop policy if exists "owner_all" on public.water_logs;
 drop policy if exists "owner_all" on public.food_logs;
 
-create policy "owner_all" on public.user_goals for all to authenticated using (true) with check (true);
-create policy "owner_all" on public.water_logs for all to authenticated using (true) with check (true);
-create policy "owner_all" on public.food_logs  for all to authenticated using (true) with check (true);
+create policy "owner_all" on public.user_goals for all to anon, authenticated using (true) with check (true);
+create policy "owner_all" on public.water_logs for all to anon, authenticated using (true) with check (true);
+create policy "owner_all" on public.food_logs  for all to anon, authenticated using (true) with check (true);

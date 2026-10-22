@@ -2,6 +2,7 @@ import { and, between, desc, eq, isNull, sql } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import { foodLogs, waterLogs, type EntryMethod, type FoodLog, type WaterLog } from '@/db/schema';
+
 import { isValidDateKey, lastNDateKeys, nowIso, toDateKey } from '@/utils/date';
 import { generateId } from '@/utils/id';
 
@@ -12,6 +13,8 @@ import {
   assertNonNegativeNumber,
   assertPositiveInt,
 } from './validation';
+
+export type { FoodLog, WaterLog };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tipos públicos
