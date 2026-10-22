@@ -1,5 +1,5 @@
 /**
- * Serviço de Integração com Google Gemini (gemini-2.5-flash)
+ * Serviço de Integração com Google Gemini (gemini-3.8-flash)
  * Realiza análise multimodal de imagem para extração precisa de macronutrientes.
  */
 
@@ -16,7 +16,7 @@ export interface AnalyzeFoodImageOptions {
 }
 
 /**
- * Envia uma foto de refeição em Base64 para a API do Gemini 2.5 Flash
+ * Envia uma foto de refeição em Base64 para a API do Gemini
  * e retorna estritamente o JSON com { name, protein_g, calories_kcal }.
  */
 export async function analyzeFoodImage({
@@ -105,7 +105,8 @@ If the image does not contain recognizable food, return "name": "Food not recogn
     },
   };
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+  const model = process.env.EXPO_PUBLIC_GEMINI_MODEL || 'gemini-3.8-flash';
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
   let response: Response;
   try {
