@@ -1,7 +1,7 @@
 import { and, between, desc, eq, isNull, sql } from 'drizzle-orm';
 
 import { db } from '@/db/client';
-import { foodLogs, waterLogs, type EntryMethod, type FoodLog, type WaterLog } from '@/db/schema';
+import { foodLogs, waterLogs, type EntryMethod, type FoodLog, type MealWindow, type WaterLog } from '@/db/schema';
 
 import { isValidDateKey, lastNDateKeys, nowIso, toDateKey } from '@/utils/date';
 import { generateId } from '@/utils/id';
@@ -14,7 +14,7 @@ import {
   assertPositiveInt,
 } from './validation';
 
-export type { FoodLog, WaterLog };
+export type { FoodLog, WaterLog, MealWindow };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tipos públicos
@@ -31,6 +31,7 @@ export interface AddFoodInput {
   proteinG: number;
   caloriesKcal: number;
   entryMethod?: EntryMethod;
+  mealWindow?: MealWindow;
   dateKey?: string;
 }
 
@@ -137,6 +138,7 @@ async function addFood(input: AddFoodInput): Promise<FoodLog> {
       proteinG: round1(input.proteinG),
       caloriesKcal: Math.round(input.caloriesKcal),
       entryMethod: input.entryMethod ?? 'manual',
+      mealWindow: input.mealWindow ?? 'lunch',
       dateKey: resolveDateKey(input.dateKey),
       createdAt: now,
       updatedAt: now,

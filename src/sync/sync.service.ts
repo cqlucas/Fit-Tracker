@@ -93,6 +93,7 @@ const foodToRemote = (r: FoodLog) => ({
   protein_g: r.proteinG,
   calories_kcal: r.caloriesKcal,
   entry_method: r.entryMethod,
+  meal_window: r.mealWindow,
   date_key: r.dateKey,
   created_at: r.createdAt,
   updated_at: r.updatedAt,
@@ -222,6 +223,9 @@ const adapters: TableAdapter[] = [
             proteinG: num(r.protein_g),
             caloriesKcal: num(r.calories_kcal),
             entryMethod: r.entry_method === 'image' ? ('image' as const) : ('manual' as const),
+            mealWindow: (['breakfast', 'lunch', 'dinner', 'snack'].includes(String(r.meal_window))
+              ? r.meal_window
+              : 'lunch') as 'breakfast' | 'lunch' | 'dinner' | 'snack',
             dateKey: str(r.date_key),
             createdAt: iso(r.created_at),
             updatedAt: iso(r.updated_at),

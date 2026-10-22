@@ -18,6 +18,9 @@ export const DEFAULT_USER_ID = 'default_user';
 export const ENTRY_METHODS = ['manual', 'image'] as const;
 export type EntryMethod = (typeof ENTRY_METHODS)[number];
 
+export const MEAL_WINDOWS = ['breakfast', 'lunch', 'dinner', 'snack'] as const;
+export type MealWindow = (typeof MEAL_WINDOWS)[number];
+
 const nowIsoSql = sql`(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`;
 
 /** Colunas de controle compartilhadas pelas tabelas de log. */
@@ -64,6 +67,7 @@ export const foodLogs = sqliteTable(
     proteinG: real('protein_g').notNull(),
     caloriesKcal: integer('calories_kcal').notNull(),
     entryMethod: text('entry_method', { enum: ENTRY_METHODS }).notNull().default('manual'),
+    mealWindow: text('meal_window', { enum: MEAL_WINDOWS }).notNull().default('lunch'),
     dateKey: text('date_key').notNull(),
     ...syncColumns,
   },

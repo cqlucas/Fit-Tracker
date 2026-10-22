@@ -44,6 +44,7 @@ const MIGRATIONS: readonly string[] = [
     protein_g      REAL NOT NULL CHECK (protein_g >= 0),
     calories_kcal  INTEGER NOT NULL CHECK (calories_kcal >= 0),
     entry_method   TEXT NOT NULL DEFAULT 'manual' CHECK (entry_method IN ('manual', 'image')),
+    meal_window    TEXT NOT NULL DEFAULT 'lunch' CHECK (meal_window IN ('breakfast', 'lunch', 'dinner', 'snack')),
     date_key       TEXT NOT NULL,
     created_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -55,6 +56,8 @@ const MIGRATIONS: readonly string[] = [
   `,
   // v2 — adição de language em user_goals
   `ALTER TABLE user_goals ADD COLUMN language TEXT NOT NULL DEFAULT 'pt';`,
+  // v3 — adição de meal_window em food_logs
+  `ALTER TABLE food_logs ADD COLUMN meal_window TEXT NOT NULL DEFAULT 'lunch';`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

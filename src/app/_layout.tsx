@@ -36,6 +36,30 @@ export default function RootLayout() {
         <StatusBar style="light" />
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen
+            name="add-log-modal"
+            options={{
+              presentation: 'transparentModal',
+              animation: 'fade',
+              headerShown: false,
+            }}
+          />
+          <Stack.Screen
+            name="add-water"
+            options={{
+              presentation: 'modal',
+              animation: 'slide_from_bottom',
+              headerShown: false,
+            }}
+          />
+          <Stack.Screen
+            name="add-food"
+            options={{
+              presentation: 'modal',
+              animation: 'slide_from_bottom',
+              headerShown: false,
+            }}
+          />
         </Stack>
       </ThemeProvider>
     </LanguageProvider>

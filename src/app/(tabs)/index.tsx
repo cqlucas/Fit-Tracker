@@ -58,7 +58,7 @@ export default function HomeScreen() {
   const waterDays = formatDaysForMacro('water');
 
   const handleQuickLog = () => {
-    router.push('/(tabs)/quick-log');
+    router.push('/add-log-modal');
   };
 
   const handleSettings = () => {

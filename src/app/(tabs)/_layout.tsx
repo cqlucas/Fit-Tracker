@@ -1,4 +1,4 @@
-import { Tabs } from 'expo-router';
+import { router, Tabs } from 'expo-router';
 import {
   Calendar,
   LayoutDashboard,
@@ -53,7 +53,7 @@ function CustomTabBar({ state, descriptors, navigateToTab, insets }: CustomTabBa
             return (
               <View key={route.key} style={styles.centerButtonWrapper}>
                 <Pressable
-                  onPress={onPress}
+                  onPress={() => router.push('/add-log-modal')}
                   accessibilityRole="button"
                   accessibilityLabel="Quick Log"
                   style={({ pressed }) => [
