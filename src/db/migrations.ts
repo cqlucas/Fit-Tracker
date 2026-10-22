@@ -43,7 +43,6 @@ const MIGRATIONS: readonly string[] = [
     protein_g      REAL NOT NULL CHECK (protein_g >= 0),
     calories_kcal  INTEGER NOT NULL CHECK (calories_kcal >= 0),
     entry_method   TEXT NOT NULL DEFAULT 'manual' CHECK (entry_method IN ('manual', 'image')),
-    image_uri      TEXT,
     date_key       TEXT NOT NULL,
     created_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),

@@ -28,7 +28,6 @@ export interface AddFoodInput {
   proteinG: number;
   caloriesKcal: number;
   entryMethod?: EntryMethod;
-  imageUri?: string | null;
   dateKey?: string;
 }
 
@@ -135,7 +134,6 @@ async function addFood(input: AddFoodInput): Promise<FoodLog> {
       proteinG: round1(input.proteinG),
       caloriesKcal: Math.round(input.caloriesKcal),
       entryMethod: input.entryMethod ?? 'manual',
-      imageUri: input.imageUri ?? null,
       dateKey: resolveDateKey(input.dateKey),
       createdAt: now,
       updatedAt: now,

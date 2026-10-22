@@ -40,7 +40,6 @@ create table if not exists public.food_logs (
   protein_g         real not null check (protein_g >= 0),
   calories_kcal     integer not null check (calories_kcal >= 0),
   entry_method      text not null default 'manual' check (entry_method in ('manual', 'image')),
-  image_uri         text,
   date_key          date not null,
   created_at        timestamptz not null default now(),
   updated_at        timestamptz not null default now(),

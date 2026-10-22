@@ -86,17 +86,12 @@ const waterToRemote = (r: WaterLog) => ({
   deleted_at: r.deletedAt,
 });
 
-/**
- * `image_uri` local (file://) não faz sentido em outro device.
- * TODO(etapa futura): upload p/ Supabase Storage e enviar a URL pública/path.
- */
 const foodToRemote = (r: FoodLog) => ({
   id: r.id,
   name: r.name,
   protein_g: r.proteinG,
   calories_kcal: r.caloriesKcal,
   entry_method: r.entryMethod,
-  image_uri: r.imageUri,
   date_key: r.dateKey,
   created_at: r.createdAt,
   updated_at: r.updatedAt,
@@ -226,7 +221,6 @@ const adapters: TableAdapter[] = [
             proteinG: num(r.protein_g),
             caloriesKcal: num(r.calories_kcal),
             entryMethod: r.entry_method === 'image' ? ('image' as const) : ('manual' as const),
-            imageUri: strOrNull(r.image_uri),
             dateKey: str(r.date_key),
             createdAt: iso(r.created_at),
             updatedAt: iso(r.updated_at),
