@@ -12,9 +12,6 @@ export interface MacroInputsSectionProps {
   onChangeProtein: (val: number) => void;
   caloriesKcal: number;
   onChangeCalories: (val: number) => void;
-  carbsG?: number;
-  fatsG?: number;
-  fiberG?: number;
   isPt?: boolean;
 }
 
@@ -25,9 +22,6 @@ export function MacroInputsSection({
   onChangeProtein,
   caloriesKcal,
   onChangeCalories,
-  carbsG = 38,
-  fatsG = 22,
-  fiberG = 7.5,
   isPt = false,
 }: MacroInputsSectionProps) {
   const adjustProtein = (delta: number) => {
@@ -173,43 +167,6 @@ export function MacroInputsSection({
           </View>
         </View>
       </View>
-
-      {/* 3. Micro-pílulas de Carbos, Gorduras e Fibras */}
-      <View style={styles.secondaryMacrosBar}>
-        <View style={styles.macroPill}>
-          <View style={[styles.dotMini, { backgroundColor: colors.secondary }]} />
-          <Typography variant="labelSm" color={colors.onSurfaceVariant}>
-            {isPt ? 'Carbos' : 'Carbs'}
-          </Typography>
-          <Typography variant="labelMd" color={colors.onSurface} style={styles.bold}>
-            {carbsG}g
-          </Typography>
-        </View>
-
-        <View style={styles.divider} />
-
-        <View style={styles.macroPill}>
-          <View style={[styles.dotMini, { backgroundColor: colors.tertiaryFixedDim }]} />
-          <Typography variant="labelSm" color={colors.onSurfaceVariant}>
-            {isPt ? 'Gorduras' : 'Fats'}
-          </Typography>
-          <Typography variant="labelMd" color={colors.onSurface} style={styles.bold}>
-            {fatsG}g
-          </Typography>
-        </View>
-
-        <View style={styles.divider} />
-
-        <View style={styles.macroPill}>
-          <View style={[styles.dotMini, { backgroundColor: colors.outline }]} />
-          <Typography variant="labelSm" color={colors.onSurfaceVariant}>
-            {isPt ? 'Fibras' : 'Fiber'}
-          </Typography>
-          <Typography variant="labelMd" color={colors.onSurface} style={styles.bold}>
-            {fiberG}g
-          </Typography>
-        </View>
-      </View>
     </View>
   );
 }
@@ -334,34 +291,5 @@ const styles = StyleSheet.create({
   },
   stepLabel: {
     fontWeight: '700',
-  },
-  secondaryMacrosBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-around',
-    backgroundColor: colors.surfaceLow,
-    borderRadius: radii.xl,
-    paddingVertical: 10,
-    paddingHorizontal: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.strokeSubtle,
-  },
-  macroPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  dotMini: {
-    width: 6,
-    height: 6,
-    borderRadius: radii.full,
-  },
-  divider: {
-    width: 1,
-    height: 16,
-    backgroundColor: colors.surfaceHighest,
-  },
-  bold: {
-    fontWeight: '800',
   },
 });

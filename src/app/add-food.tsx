@@ -38,19 +38,7 @@ export default function AddFoodScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
 
-  // Estimativa visual derivada de macros secundários
-  const estimatedCarbs =
-    caloriesKcal > 0
-      ? Math.max(0, Math.round(((caloriesKcal - proteinG * 4) * 0.55) / 4))
-      : 0;
-  const estimatedFats =
-    caloriesKcal > 0
-      ? Math.max(0, Math.round(((caloriesKcal - proteinG * 4) * 0.35) / 9))
-      : 0;
-  const estimatedFiber =
-    estimatedCarbs > 0 ? Math.round(estimatedCarbs * 0.15 * 10) / 10 : 0;
-
-  // Processa a imagem capturada com o Gemini 2.5 Flash
+  // Processa a imagem capturada com o Gemini
   const processSelectedImage = async (asset: ImagePicker.ImagePickerAsset) => {
     setImageUri(asset.uri);
 
@@ -263,7 +251,7 @@ export default function AddFoodScreen() {
             isPt={isPt}
           />
 
-          {/* Seção Principal de Entradas Manuais: Nome, Proteína, Calorias e Macros Secundários */}
+          {/* Seção Principal de Entradas Manuais: Nome, Proteína e Calorias */}
           <MacroInputsSection
             name={mealName}
             onChangeName={setMealName}
@@ -271,9 +259,6 @@ export default function AddFoodScreen() {
             onChangeProtein={setProteinG}
             caloriesKcal={caloriesKcal}
             onChangeCalories={setCaloriesKcal}
-            carbsG={estimatedCarbs}
-            fatsG={estimatedFats}
-            fiberG={estimatedFiber}
             isPt={isPt}
           />
 

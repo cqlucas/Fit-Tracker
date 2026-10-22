@@ -1,3 +1,4 @@
+import Constants from 'expo-constants';
 import { CheckCircle2, Save } from 'lucide-react-native';
 import React from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
@@ -18,6 +19,8 @@ export function SaveGoalsButton({
   isSaved = false,
   isPt = false,
 }: SaveGoalsButtonProps) {
+  const appVersion = Constants.expoConfig?.version ?? '1.0.0';
+
   return (
     <View style={styles.container}>
       <Pressable
@@ -54,6 +57,10 @@ export function SaveGoalsButton({
         {isPt
           ? 'As alterações recalculam instantaneamente os gráficos de rosca e o progresso.'
           : 'Changes reflect instantly across widgets, companions, and ring charts.'}
+      </Typography>
+
+      <Typography variant="unitCaption" center style={styles.versionText}>
+        v{appVersion}
       </Typography>
     </View>
   );
@@ -94,5 +101,11 @@ const styles = StyleSheet.create({
   },
   helperText: {
     lineHeight: 16,
+  },
+  versionText: {
+    color: '#262a31', // tom próximo ao fundo (#10141a), sutil e quase invisível
+    fontSize: 11,
+    letterSpacing: 0.8,
+    marginTop: 4,
   },
 });

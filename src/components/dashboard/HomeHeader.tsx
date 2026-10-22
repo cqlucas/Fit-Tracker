@@ -11,7 +11,6 @@ export interface HomeHeaderProps {
   dateTitle: string; // e.g. "Today, Oct 24"
   dayOfWeek: string; // e.g. "Thu"
   streakDays?: number;
-  onPressSettings?: () => void;
   onPressNotifications?: () => void;
   onPressTune?: () => void;
 }
@@ -20,7 +19,6 @@ export function HomeHeader({
   dateTitle,
   dayOfWeek,
   streakDays = 1,
-  onPressSettings,
   onPressNotifications,
   onPressTune,
 }: HomeHeaderProps) {
@@ -52,14 +50,6 @@ export function HomeHeader({
             onPress={onPressNotifications}
             accessibilityLabel={t.home.notifications}
           />
-          <IconButton
-            size={38}
-            backgroundColor={colors.surfaceContainer}
-            borderColor={`${colors.primary}40`}
-            icon={<SlidersHorizontal size={18} color={colors.primary} />}
-            onPress={onPressSettings}
-            accessibilityLabel={t.tabs.settings}
-          />
         </View>
       </View>
 
@@ -85,13 +75,15 @@ export function HomeHeader({
           </View>
         </View>
 
-        <IconButton
-          size={38}
-          backgroundColor={colors.surfaceContainer}
-          icon={<SlidersHorizontal size={18} color={colors.onSurfaceVariant} />}
-          onPress={onPressTune}
-          accessibilityLabel={t.home.adjustTarget}
-        />
+        {onPressTune ? (
+          <IconButton
+            size={38}
+            backgroundColor={colors.surfaceContainer}
+            icon={<SlidersHorizontal size={18} color={colors.onSurfaceVariant} />}
+            onPress={onPressTune}
+            accessibilityLabel={t.home.adjustTarget}
+          />
+        ) : null}
       </View>
     </View>
   );

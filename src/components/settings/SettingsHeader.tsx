@@ -29,9 +29,6 @@ export function SettingsHeader({ onBack, onReset, isPt = false }: SettingsHeader
           <Typography variant="headlineSm" style={styles.title}>
             {isPt ? 'Metas & Alvos Diários' : 'Daily Goals & Targets'}
           </Typography>
-          <Typography variant="labelSm" color={colors.outline}>
-            Metabolic Telemetry v2.4
-          </Typography>
         </View>
       </View>
 

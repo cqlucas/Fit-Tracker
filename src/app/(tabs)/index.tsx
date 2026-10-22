@@ -61,10 +61,6 @@ export default function HomeScreen() {
     router.push('/add-log-modal');
   };
 
-  const handleSettings = () => {
-    router.push('/(tabs)/settings');
-  };
-
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <ScrollView
@@ -84,8 +80,6 @@ export default function HomeScreen() {
           dateTitle={dateTitle}
           dayOfWeek={dayOfWeek}
           streakDays={weeklyStats.proteinDaysHit + weeklyStats.waterDaysHit > 0 ? 7 : 1}
-          onPressTune={handleSettings}
-          onPressSettings={handleSettings}
           onPressNotifications={() => {}}
         />
 
