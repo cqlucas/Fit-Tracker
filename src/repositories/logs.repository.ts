@@ -3,7 +3,7 @@ import { and, between, desc, eq, isNull, sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { foodLogs, waterLogs, type EntryMethod, type FoodLog, type MealWindow, type WaterLog } from '@/db/schema';
 
-import { isValidDateKey, lastNDateKeys, nowIso, toDateKey } from '@/utils/date';
+import { addDays, dateKeysInRange, isValidDateKey, lastNDateKeys, nowIso, toDateKey } from '@/utils/date';
 import { generateId } from '@/utils/id';
 
 import { goalsRepository, type Goals } from './goals.repository';
@@ -39,6 +39,57 @@ export interface HistoryFilters {
   type?: 'all' | 'water' | 'food';
   searchQuery?: string;
   dateKey?: string | null;
+}
+
+export type AnalyticsPeriod = '7d' | '14d' | '30d';
+
+export interface AnalyticsPeriodRange {
+  startDateKey: string;
+  endDateKey: string;
+}
+
+export type AnalyticsPeriodInput = AnalyticsPeriod | AnalyticsPeriodRange;
+
+export interface AnalyticsKPIs {
+  avgProteinG: number;
+  avgWaterMl: number;
+  avgCaloriesKcal: number;
+  proteinSuccessRate: number; // 0..100 (%)
+  waterSuccessRate: number; // 0..100 (%)
+  bothSuccessRate: number; // 0..100 (%)
+  currentStreak: number;
+  totalDays: number;
+  daysWithLogs: number;
+}
+
+export interface DailySeriesPoint {
+  dateKey: string;
+  label: string;
+  proteinG: number;
+  waterMl: number;
+  caloriesKcal: number;
+  hitProteinGoal: boolean;
+  hitWaterGoal: boolean;
+  hitBothGoals: boolean;
+}
+
+export interface MealWindowBreakdownItem {
+  window: MealWindow;
+  proteinG: number;
+  caloriesKcal: number;
+  proteinPercent: number; // 0..100 (%)
+  caloriesPercent: number; // 0..100 (%)
+  entriesCount: number;
+}
+
+export interface AnalyticsData {
+  period: AnalyticsPeriod | 'custom';
+  startDateKey: string;
+  endDateKey: string;
+  goals: Goals;
+  kpis: AnalyticsKPIs;
+  dailySeries: DailySeriesPoint[];
+  mealWindowBreakdown: MealWindowBreakdownItem[];
 }
 
 export type UnifiedLogItem =
@@ -394,6 +445,235 @@ async function getLogsHistory(filters: HistoryFilters = {}): Promise<UnifiedLogI
   return unified;
 }
 
+/**
+ * Calcula a sequência atual (streak) de dias consecutivos batendo pelo menos uma meta
+ * (proteína ou água) até hoje. Se hoje ainda não bateu mas ontem bateu, o streak permanece ativo.
+ */
+async function calculateCurrentStreak(goals: Goals, todayKey: string): Promise<number> {
+  const checkStart = addDays(todayKey, -60);
+  const [waterRows, foodRows] = await Promise.all([
+    db
+      .select({
+        dateKey: waterLogs.dateKey,
+        totalMl: sql<number>`coalesce(sum(${waterLogs.amountMl}), 0)`,
+      })
+      .from(waterLogs)
+      .where(and(between(waterLogs.dateKey, checkStart, todayKey), notDeletedWater))
+      .groupBy(waterLogs.dateKey),
+    db
+      .select({
+        dateKey: foodLogs.dateKey,
+        proteinG: sql<number>`coalesce(sum(${foodLogs.proteinG}), 0)`,
+      })
+      .from(foodLogs)
+      .where(and(between(foodLogs.dateKey, checkStart, todayKey), notDeletedFood))
+      .groupBy(foodLogs.dateKey),
+  ]);
+
+  const waterMap = new Map(waterRows.map((r) => [r.dateKey, r.totalMl]));
+  const foodMap = new Map(foodRows.map((r) => [r.dateKey, r.proteinG]));
+
+  const isDayHit = (dk: string) => {
+    const p = foodMap.get(dk) ?? 0;
+    const w = waterMap.get(dk) ?? 0;
+    return p >= goals.proteinGoal || w >= goals.waterGoal;
+  };
+
+  let streak = 0;
+  let currentKey = todayKey;
+
+  if (isDayHit(todayKey)) {
+    streak = 1;
+    currentKey = addDays(todayKey, -1);
+  } else {
+    const yesterday = addDays(todayKey, -1);
+    if (isDayHit(yesterday)) {
+      streak = 1;
+      currentKey = addDays(yesterday, -1);
+    } else {
+      return 0;
+    }
+  }
+
+  while (currentKey >= checkStart) {
+    if (isDayHit(currentKey)) {
+      streak++;
+      currentKey = addDays(currentKey, -1);
+    } else {
+      break;
+    }
+  }
+
+  return streak;
+}
+
+/**
+ * Calcula métricas agregadas para a tela de Analytics diretamente do SQLite.
+ * Preenche dias vazios com 0 e gera KPIs, série temporal e divisão por janelas de refeição.
+ */
+async function getAnalyticsData(periodInput: AnalyticsPeriodInput = '7d'): Promise<AnalyticsData> {
+  const todayKey = toDateKey();
+  let period: AnalyticsPeriod | 'custom';
+  let dateKeys: string[];
+  let start: string;
+  let end: string;
+
+  if (typeof periodInput === 'string') {
+    period = periodInput;
+    const count = periodInput === '30d' ? 30 : periodInput === '14d' ? 14 : 7;
+    dateKeys = lastNDateKeys(count, todayKey);
+    start = dateKeys[0];
+    end = dateKeys[dateKeys.length - 1];
+  } else {
+    period = 'custom';
+    start = resolveDateKey(periodInput.startDateKey);
+    end = resolveDateKey(periodInput.endDateKey);
+    if (start > end) {
+      const temp = start;
+      start = end;
+      end = temp;
+    }
+    dateKeys = dateKeysInRange(start, end);
+  }
+
+  const goals = await goalsRepository.get();
+
+  const [waterByDay, foodByDay, mealWindows, streak] = await Promise.all([
+    db
+      .select({
+        dateKey: waterLogs.dateKey,
+        totalMl: sql<number>`coalesce(sum(${waterLogs.amountMl}), 0)`,
+        entries: sql<number>`count(*)`,
+      })
+      .from(waterLogs)
+      .where(and(between(waterLogs.dateKey, start, end), notDeletedWater))
+      .groupBy(waterLogs.dateKey),
+    db
+      .select({
+        dateKey: foodLogs.dateKey,
+        proteinG: sql<number>`coalesce(sum(${foodLogs.proteinG}), 0)`,
+        caloriesKcal: sql<number>`coalesce(sum(${foodLogs.caloriesKcal}), 0)`,
+        entries: sql<number>`count(*)`,
+      })
+      .from(foodLogs)
+      .where(and(between(foodLogs.dateKey, start, end), notDeletedFood))
+      .groupBy(foodLogs.dateKey),
+    db
+      .select({
+        mealWindow: foodLogs.mealWindow,
+        proteinG: sql<number>`coalesce(sum(${foodLogs.proteinG}), 0)`,
+        caloriesKcal: sql<number>`coalesce(sum(${foodLogs.caloriesKcal}), 0)`,
+        entries: sql<number>`count(*)`,
+      })
+      .from(foodLogs)
+      .where(and(between(foodLogs.dateKey, start, end), notDeletedFood))
+      .groupBy(foodLogs.mealWindow),
+    calculateCurrentStreak(goals, todayKey),
+  ]);
+
+  const waterMap = new Map(waterByDay.map((r) => [r.dateKey, r]));
+  const foodMap = new Map(foodByDay.map((r) => [r.dateKey, r]));
+
+  let totalProtein = 0;
+  let totalWater = 0;
+  let totalCalories = 0;
+  let daysWithProteinHit = 0;
+  let daysWithWaterHit = 0;
+  let daysWithBothHit = 0;
+  let daysWithLogs = 0;
+
+  const dailySeries: DailySeriesPoint[] = dateKeys.map((dateKey) => {
+    const f = foodMap.get(dateKey);
+    const w = waterMap.get(dateKey);
+
+    const proteinG = round1(f?.proteinG ?? 0);
+    const caloriesKcal = Math.round(f?.caloriesKcal ?? 0);
+    const waterMl = Math.round(w?.totalMl ?? 0);
+
+    const hasLog = (f?.entries ?? 0) > 0 || (w?.entries ?? 0) > 0;
+    if (hasLog) daysWithLogs++;
+
+    const hitProteinGoal = proteinG >= goals.proteinGoal;
+    const hitWaterGoal = waterMl >= goals.waterGoal;
+    const hitBothGoals = hitProteinGoal && hitWaterGoal;
+
+    if (hitProteinGoal) daysWithProteinHit++;
+    if (hitWaterGoal) daysWithWaterHit++;
+    if (hitBothGoals) daysWithBothHit++;
+
+    totalProtein += proteinG;
+    totalWater += waterMl;
+    totalCalories += caloriesKcal;
+
+    const [, m, d] = dateKey.split('-');
+    const label = `${d}/${m}`;
+
+    return {
+      dateKey,
+      label,
+      proteinG,
+      waterMl,
+      caloriesKcal,
+      hitProteinGoal,
+      hitWaterGoal,
+      hitBothGoals,
+    };
+  });
+
+  const totalDays = dateKeys.length || 1;
+  const avgProteinG = round1(totalProtein / totalDays);
+  const avgWaterMl = Math.round(totalWater / totalDays);
+  const avgCaloriesKcal = Math.round(totalCalories / totalDays);
+
+  const proteinSuccessRate = Math.round((daysWithProteinHit / totalDays) * 100);
+  const waterSuccessRate = Math.round((daysWithWaterHit / totalDays) * 100);
+  const bothSuccessRate = Math.round((daysWithBothHit / totalDays) * 100);
+
+  const ALL_WINDOWS: MealWindow[] = ['breakfast', 'lunch', 'dinner', 'snack'];
+  const mealMap = new Map(mealWindows.map((m) => [m.mealWindow, m]));
+
+  const totalPeriodFoodProtein = mealWindows.reduce((acc, curr) => acc + (curr.proteinG || 0), 0);
+  const totalPeriodFoodCalories = mealWindows.reduce((acc, curr) => acc + (curr.caloriesKcal || 0), 0);
+
+  const mealWindowBreakdown: MealWindowBreakdownItem[] = ALL_WINDOWS.map((win) => {
+    const found = mealMap.get(win);
+    const proteinG = round1(found?.proteinG ?? 0);
+    const caloriesKcal = Math.round(found?.caloriesKcal ?? 0);
+    const entriesCount = Number(found?.entries ?? 0);
+
+    return {
+      window: win,
+      proteinG,
+      caloriesKcal,
+      proteinPercent:
+        totalPeriodFoodProtein > 0 ? Math.round((proteinG / totalPeriodFoodProtein) * 100) : 0,
+      caloriesPercent:
+        totalPeriodFoodCalories > 0 ? Math.round((caloriesKcal / totalPeriodFoodCalories) * 100) : 0,
+      entriesCount,
+    };
+  });
+
+  return {
+    period,
+    startDateKey: start,
+    endDateKey: end,
+    goals,
+    kpis: {
+      avgProteinG,
+      avgWaterMl,
+      avgCaloriesKcal,
+      proteinSuccessRate,
+      waterSuccessRate,
+      bothSuccessRate,
+      currentStreak: streak,
+      totalDays,
+      daysWithLogs,
+    },
+    dailySeries,
+    mealWindowBreakdown,
+  };
+}
+
 export const logsRepository = {
   addWater,
   addWaterLog: addWater,
@@ -403,6 +683,7 @@ export const logsRepository = {
   removeFood,
   deleteLog,
   getLogsHistory,
+  getAnalyticsData,
   waterLogsByDateQuery,
   foodLogsByDateQuery,
   getDailySummary,

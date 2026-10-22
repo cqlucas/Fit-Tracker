@@ -39,3 +39,14 @@ export function isValidDateKey(value: string): boolean {
 export function nowIso(): string {
   return new Date().toISOString();
 }
+
+/** Array de todas as chaves de data entre startDateKey e endDateKey (inclusivo). */
+export function dateKeysInRange(startDateKey: string, endDateKey: string): string[] {
+  const result: string[] = [];
+  let curr = startDateKey;
+  while (curr <= endDateKey) {
+    result.push(curr);
+    curr = addDays(curr, 1);
+  }
+  return result;
+}

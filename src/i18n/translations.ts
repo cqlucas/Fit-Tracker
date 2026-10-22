@@ -103,6 +103,41 @@ export interface TranslationSchema {
     snack: string;
     totalEntries: (count: number) => string;
   };
+  analytics: {
+    headerTitle: string;
+    headerSubtitle: string;
+    period7d: string;
+    period14d: string;
+    period30d: string;
+    avgProtein: string;
+    avgWater: string;
+    avgCalories: string;
+    successRate: string;
+    streak: string;
+    daysStreak: (days: number) => string;
+    aboveGoal: string;
+    belowGoal: string;
+    onGoal: string;
+    dailyEvolution: string;
+    protein: string;
+    water: string;
+    calories: string;
+    goalLine: string;
+    selectedDay: string;
+    mealDistribution: string;
+    mealDistributionSub: string;
+    consistencyMap: string;
+    consistencyMapSub: string;
+    bothGoals: string;
+    oneGoal: string;
+    noGoal: string;
+    breakfast: string;
+    lunch: string;
+    dinner: string;
+    snack: string;
+    emptyTitle: string;
+    emptySubtitle: string;
+  };
 }
 
 export const translations: Record<AppLanguage, TranslationSchema> = {
@@ -213,6 +248,41 @@ export const translations: Record<AppLanguage, TranslationSchema> = {
       snack: 'Lanche',
       totalEntries: (count: number) => `${count} registro${count === 1 ? '' : 's'}`,
     },
+    analytics: {
+      headerTitle: 'Estatísticas & Evolução',
+      headerSubtitle: 'MÉTRICAS METABÓLICAS',
+      period7d: '7 Dias',
+      period14d: '14 Dias',
+      period30d: '30 Dias',
+      avgProtein: 'Média Proteína/dia',
+      avgWater: 'Média Água/dia',
+      avgCalories: 'Média Calorias/dia',
+      successRate: 'Taxa de Metas',
+      streak: 'Sequência Atual',
+      daysStreak: (days: number) => `${days} dia${days === 1 ? '' : 's'} seguidos`,
+      aboveGoal: 'Acima da meta',
+      belowGoal: 'Abaixo da meta',
+      onGoal: 'Na meta',
+      dailyEvolution: 'Evolução Diária',
+      protein: 'Proteína',
+      water: 'Água',
+      calories: 'Calorias',
+      goalLine: 'Meta Diária',
+      selectedDay: 'Dia Selecionado',
+      mealDistribution: 'Distribuição por Refeição',
+      mealDistributionSub: 'Concentração de nutrientes por horário',
+      consistencyMap: 'Mapa de Consistência',
+      consistencyMapSub: 'Frequência de cumprimento de metas',
+      bothGoals: 'Ambas as metas',
+      oneGoal: 'Apenas 1 meta',
+      noGoal: 'Nenhuma meta',
+      breakfast: 'Café da manhã',
+      lunch: 'Almoço',
+      dinner: 'Jantar',
+      snack: 'Lanches',
+      emptyTitle: 'Sem dados suficientes',
+      emptySubtitle: 'Registre suas refeições e hidratação para acompanhar sua evolução.',
+    },
   },
   en: {
     tabs: {
@@ -320,6 +390,41 @@ export const translations: Record<AppLanguage, TranslationSchema> = {
       dinner: 'Dinner',
       snack: 'Snack',
       totalEntries: (count: number) => `${count} record${count === 1 ? '' : 's'}`,
+    },
+    analytics: {
+      headerTitle: 'Analytics & Progress',
+      headerSubtitle: 'METABOLIC METRICS',
+      period7d: '7 Days',
+      period14d: '14 Days',
+      period30d: '30 Days',
+      avgProtein: 'Avg Protein/day',
+      avgWater: 'Avg Water/day',
+      avgCalories: 'Avg Calories/day',
+      successRate: 'Goal Hit Rate',
+      streak: 'Current Streak',
+      daysStreak: (days: number) => `${days} day${days === 1 ? '' : 's'} streak`,
+      aboveGoal: 'Above goal',
+      belowGoal: 'Below goal',
+      onGoal: 'On goal',
+      dailyEvolution: 'Daily Trend',
+      protein: 'Protein',
+      water: 'Water',
+      calories: 'Calories',
+      goalLine: 'Daily Target',
+      selectedDay: 'Selected Day',
+      mealDistribution: 'Meal Window Breakdown',
+      mealDistributionSub: 'Nutrient density throughout the day',
+      consistencyMap: 'Habit Consistency Map',
+      consistencyMapSub: 'Daily goals accomplishment frequency',
+      bothGoals: 'Both goals met',
+      oneGoal: '1 goal met',
+      noGoal: 'No goals met',
+      breakfast: 'Breakfast',
+      lunch: 'Lunch',
+      dinner: 'Dinner',
+      snack: 'Snacks',
+      emptyTitle: 'Insufficient data',
+      emptySubtitle: 'Start logging your meals and hydration to view trends and charts.',
     },
   },
 };
