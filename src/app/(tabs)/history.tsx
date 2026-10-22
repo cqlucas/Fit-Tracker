@@ -7,7 +7,7 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { HistoryEmptyState } from '@/components/history/HistoryEmptyState';
 import { HistoryFiltersBar } from '@/components/history/HistoryFiltersBar';
@@ -20,6 +20,7 @@ import { UnifiedLogItem } from '@/repositories/logs.repository';
 import { colors, radii, spacing } from '@/theme/tokens';
 
 export default function HistoryScreen() {
+  const insets = useSafeAreaInsets();
   const { t } = useLanguage();
 
   const {
@@ -99,7 +100,10 @@ export default function HistoryScreen() {
           />
         )}
         stickySectionHeadersEnabled={false}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[
+          styles.listContent,
+          { paddingBottom: insets.bottom + 96 },
+        ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl

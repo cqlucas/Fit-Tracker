@@ -7,7 +7,7 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CaloriesProgressCard } from '@/components/dashboard/CaloriesProgressCard';
 import { DonutChartCard } from '@/components/dashboard/DonutChartCard';
@@ -28,6 +28,7 @@ import { colors, spacing } from '@/theme/tokens';
 
 export default function HomeScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { t, isPt } = useLanguage();
   const {
     isLoading,
@@ -65,7 +66,10 @@ export default function HomeScreen() {
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.contentContainer}
+        contentContainerStyle={[
+          styles.contentContainer,
+          { paddingBottom: insets.bottom + 96 },
+        ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -80,7 +84,6 @@ export default function HomeScreen() {
           dateTitle={dateTitle}
           dayOfWeek={dayOfWeek}
           streakDays={weeklyStats.proteinDaysHit + weeklyStats.waterDaysHit > 0 ? 7 : 1}
-          onPressNotifications={() => {}}
         />
 
         {/* Hero Section: Dual Macro Donut Rings (Proteína & Água) */}
@@ -103,12 +106,6 @@ export default function HomeScreen() {
               unit="ml"
               color={colors.secondary}
               glow="secondary"
-              formatValue={(val) => {
-                if (val >= 1000) {
-                  return `${(val / 1000).toFixed(1)}L`;
-                }
-                return `${val}ml`;
-              }}
             />
           </View>
         )}

@@ -6,7 +6,7 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AnalyticsPeriodSelector } from '@/components/analytics/AnalyticsPeriodSelector';
 import { AnalyticsSkeleton } from '@/components/analytics/AnalyticsSkeleton';
@@ -20,6 +20,7 @@ import { useAnalyticsData } from '@/hooks/useAnalyticsData';
 import { colors, radii, spacing } from '@/theme/tokens';
 
 export default function AnalyticsScreen() {
+  const insets = useSafeAreaInsets();
   const { t } = useLanguage();
   const { period, setPeriod, data, isLoading, isRefreshing, refresh } =
     useAnalyticsData('7d');
@@ -28,7 +29,10 @@ export default function AnalyticsScreen() {
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.contentContainer}
+        contentContainerStyle={[
+          styles.contentContainer,
+          { paddingBottom: insets.bottom + 96 },
+        ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl

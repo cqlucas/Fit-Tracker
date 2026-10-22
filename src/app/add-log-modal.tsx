@@ -250,6 +250,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm + 4,
     flex: 1,
+    minWidth: 0,
     paddingRight: spacing.sm,
   },
   iconBox: {
@@ -258,9 +259,11 @@ const styles = StyleSheet.create({
     borderRadius: radii.lg,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   cardInfo: {
     flex: 1,
+    minWidth: 0,
     gap: 3,
   },
   cardTitleRow: {

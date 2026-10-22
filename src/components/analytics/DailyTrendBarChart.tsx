@@ -1,6 +1,6 @@
 import { Dumbbell, Droplets, Flame, Target } from 'lucide-react-native';
 import React, { useMemo, useState } from 'react';
-import { LayoutChangeEvent, Pressable, StyleSheet, View } from 'react-native';
+import { LayoutChangeEvent, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 import Svg, { G, Line, Rect, Text as SvgText } from 'react-native-svg';
 
 import { Card } from '@/components/ui/Card';
@@ -19,17 +19,23 @@ export interface DailyTrendBarChartProps {
 
 export function DailyTrendBarChart({ series, goals }: DailyTrendBarChartProps) {
   const { t } = useLanguage();
+  const { width: windowWidth } = useWindowDimensions();
   const [metric, setMetric] = useState<MetricType>('protein');
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
-  const [containerWidth, setContainerWidth] = useState<number>(340);
+
+  // Largura inicial calculada para evitar layout shift antes do onLayout
+  const initialWidth = Math.max(windowWidth - (spacing.lg * 2 + spacing.md * 2), 260);
+  const [containerWidth, setContainerWidth] = useState<number>(initialWidth);
 
   // Seleciona o ponto atual (ou o último ponto se nada estiver tocado)
   const activeIndex = selectedIndex !== null ? selectedIndex : series.length - 1;
   const activePoint = series[activeIndex] ?? series[series.length - 1];
 
   const handleLayout = (e: LayoutChangeEvent) => {
-    const w = e.nativeEvent.layout.width;
-    if (w > 0) setContainerWidth(w);
+    const w = Math.floor(e.nativeEvent.layout.width);
+    if (w > 0 && Math.abs(w - containerWidth) > 1) {
+      setContainerWidth(w);
+    }
   };
 
   // Configuração por macro

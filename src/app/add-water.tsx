@@ -6,7 +6,7 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { HydrationImpactBar } from '@/components/water/HydrationImpactBar';
 import { QuickWaterPresets } from '@/components/water/QuickWaterPresets';
@@ -22,6 +22,7 @@ import { colors, radii, shadows, spacing } from '@/theme/tokens';
 import { toDateKey } from '@/utils/date';
 
 export default function AddWaterScreen() {
+  const insets = useSafeAreaInsets();
   const { isPt } = useLanguage();
   const { id } = useLocalSearchParams<{ id?: string }>();
   const isEditMode = Boolean(id);
@@ -145,10 +146,13 @@ export default function AddWaterScreen() {
     : 'Quick Log';
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right', 'bottom']}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.contentContainer}
+        contentContainerStyle={[
+          styles.contentContainer,
+          { paddingBottom: Math.max(insets.bottom + 24, spacing.xl) },
+        ]}
         showsVerticalScrollIndicator={false}>
         {/* Cabeçalho superior com botão voltar */}
         <WaterHeader title={screenTitle} />

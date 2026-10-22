@@ -7,7 +7,7 @@ import {
   ScrollView,
   StyleSheet,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CalorieGoalCard } from '@/components/settings/CalorieGoalCard';
 import { IntroBanner } from '@/components/settings/IntroBanner';
@@ -15,7 +15,6 @@ import { LanguageSelectorCard } from '@/components/settings/LanguageSelectorCard
 import { ProteinGoalCard } from '@/components/settings/ProteinGoalCard';
 import { SaveGoalsButton } from '@/components/settings/SaveGoalsButton';
 import { SettingsHeader } from '@/components/settings/SettingsHeader';
-import { StaticReminderCard } from '@/components/settings/StaticReminderCard';
 import { StatusSyncCard } from '@/components/settings/StatusSyncCard';
 import { WaterGoalCard } from '@/components/settings/WaterGoalCard';
 import { useLanguage } from '@/context/LanguageContext';
@@ -24,6 +23,7 @@ import { colors, spacing } from '@/theme/tokens';
 
 export default function SettingsScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { setLanguage: setGlobalLanguage, language: currentGlobalLang, t } = useLanguage();
 
   // Estados locais do formulário de metas
@@ -124,10 +124,13 @@ export default function SettingsScreen() {
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <KeyboardAvoidingView
         style={styles.keyboardAvoid}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView
           style={styles.scrollView}
-          contentContainerStyle={styles.contentContainer}
+          contentContainerStyle={[
+            styles.contentContainer,
+            { paddingBottom: insets.bottom + 96 },
+          ]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled">
           {/* Cabeçalho com botão voltar e resetar */}
@@ -158,9 +161,6 @@ export default function SettingsScreen() {
             language={language}
             onSelectLanguage={handleSelectLanguage}
           />
-
-          {/* 5. Lembrete Estático: Prévia visual sem push nativo */}
-          <StaticReminderCard isPt={isPt} />
 
           {/* Status de Sincronização Telemetry */}
           <StatusSyncCard isPt={isPt} />

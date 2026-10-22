@@ -47,7 +47,10 @@ export function MealWindowSelector({
               <Typography
                 variant="labelMd"
                 color={isActive ? colors.primary : colors.onSurfaceVariant}
-                style={isActive ? styles.textActive : styles.textInactive}>
+                style={isActive ? styles.textActive : styles.textInactive}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.75}>
                 {w.label}
               </Typography>
             </Pressable>
@@ -74,6 +77,7 @@ const styles = StyleSheet.create({
   },
   pill: {
     flex: 1,
+    minWidth: 0,
     paddingVertical: 10,
     paddingHorizontal: 2,
     borderRadius: radii.xl,

@@ -90,7 +90,11 @@ export function HistoryLogItemCard({ item, onDelete, onEdit }: HistoryLogItemCar
 
           {/* Dados Textuais */}
           <View style={styles.detailsCol}>
-            <Typography variant="labelMd" style={styles.itemTitle} numberOfLines={1}>
+            <Typography
+              variant="labelMd"
+              style={styles.itemTitle}
+              numberOfLines={1}
+              ellipsizeMode="tail">
               {item.name}
             </Typography>
 
@@ -253,6 +257,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm + 2,
     flex: 1,
+    minWidth: 0,
     marginRight: spacing.sm,
   },
   iconBox: {
@@ -261,6 +266,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.lg,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
   foodIconBox: {
     backgroundColor: `${colors.primary}16`,
@@ -274,6 +280,7 @@ const styles = StyleSheet.create({
   },
   detailsCol: {
     flex: 1,
+    minWidth: 0,
     gap: 3,
   },
   itemTitle: {
@@ -304,6 +311,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
+    flexShrink: 0,
   },
   macrosCol: {
     alignItems: 'flex-end',

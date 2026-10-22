@@ -82,7 +82,13 @@ export function MacroInputsSection({
           </View>
 
           <View style={styles.valueRow}>
-            <Typography variant="metricNumeralLg" color={colors.onSurface} style={styles.number}>
+            <Typography
+              variant="metricNumeralLg"
+              color={colors.onSurface}
+              style={styles.number}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.7}>
               {proteinG}
             </Typography>
             <Typography variant="headlineSm" color={colors.onSurfaceVariant} style={styles.unit}>
@@ -133,7 +139,13 @@ export function MacroInputsSection({
           </View>
 
           <View style={styles.valueRow}>
-            <Typography variant="metricNumeralLg" color={colors.onSurface} style={styles.number}>
+            <Typography
+              variant="metricNumeralLg"
+              color={colors.onSurface}
+              style={styles.number}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.7}>
               {caloriesKcal}
             </Typography>
             <Typography variant="bodyMd" color={colors.onSurfaceVariant} style={styles.unitKcal}>
@@ -213,6 +225,7 @@ const styles = StyleSheet.create({
   },
   macroCard: {
     flex: 1,
+    minWidth: 0,
     backgroundColor: colors.surfaceContainer,
     borderRadius: radii.xl,
     padding: spacing.md,

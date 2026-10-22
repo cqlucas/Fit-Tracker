@@ -34,10 +34,15 @@ export function RecentMealCard({
             <Utensils size={20} color={colors.primary} />
           </View>
           <View style={styles.info}>
-            <Typography variant="labelMd" style={styles.name}>
+            <Typography variant="labelMd" style={styles.name} numberOfLines={1} ellipsizeMode="tail">
               {name}
             </Typography>
-            <Typography variant="unitCaption" color={colors.onSurfaceVariant} style={styles.details}>
+            <Typography
+              variant="unitCaption"
+              color={colors.onSurfaceVariant}
+              style={styles.details}
+              numberOfLines={1}
+              ellipsizeMode="tail">
               {resolvedTimeString} • {proteinG}g {proteinUnit} • {caloriesKcal} kcal
             </Typography>
           </View>

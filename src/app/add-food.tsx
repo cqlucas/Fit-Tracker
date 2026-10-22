@@ -8,7 +8,7 @@ import {
   ScrollView,
   StyleSheet,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FoodHeader } from '@/components/food/FoodHeader';
 import { FoodImagePickerCard } from '@/components/food/FoodImagePickerCard';
@@ -24,6 +24,7 @@ import { colors, spacing } from '@/theme/tokens';
 import { toDateKey } from '@/utils/date';
 
 export default function AddFoodScreen() {
+  const insets = useSafeAreaInsets();
   const { isPt } = useLanguage();
   const { id } = useLocalSearchParams<{ id?: string }>();
   const isEditMode = Boolean(id);
@@ -276,13 +277,16 @@ export default function AddFoodScreen() {
     : 'Quick Log';
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right', 'bottom']}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <KeyboardAvoidingView
         style={styles.keyboardAvoid}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView
           style={styles.scrollView}
-          contentContainerStyle={styles.contentContainer}
+          contentContainerStyle={[
+            styles.contentContainer,
+            { paddingBottom: Math.max(insets.bottom + 24, spacing.xl) },
+          ]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled">
           {/* Cabeçalho superior com botão voltar */}

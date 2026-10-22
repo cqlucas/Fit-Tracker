@@ -72,19 +72,24 @@ export function SummaryMetricsGrid({ kpis, goals }: SummaryMetricsGridProps) {
 
           <View style={styles.metricArea}>
             <View style={styles.valueRow}>
-              <Typography variant="metricNumeralLg" style={styles.mainValue}>
+              <Typography
+                variant="metricNumeralLg"
+                style={styles.mainValue}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.7}>
                 {kpis.avgProteinG}
               </Typography>
               <Typography variant="labelSm" color={colors.primary} style={styles.unitText}>
                 g/dia
               </Typography>
             </View>
-            <Typography variant="labelSm" color={colors.onSurfaceVariant}>
+            <Typography variant="labelSm" color={colors.onSurfaceVariant} numberOfLines={1}>
               {t.analytics.avgProtein}
             </Typography>
           </View>
 
-          <Typography variant="unitCaption" color={colors.onSurfaceVariant} style={styles.metaHint}>
+          <Typography variant="unitCaption" color={colors.onSurfaceVariant} style={styles.metaHint} numberOfLines={1}>
             Meta: {goals.proteinGoal}g/dia
           </Typography>
         </View>
@@ -112,7 +117,8 @@ export function SummaryMetricsGrid({ kpis, goals }: SummaryMetricsGridProps) {
                     ? colors.secondary
                     : colors.onSurfaceVariant
                 }
-                style={styles.statusPillText}>
+                style={styles.statusPillText}
+                numberOfLines={1}>
                 {kpis.waterSuccessRate}% batido
               </Typography>
             </View>
@@ -120,19 +126,24 @@ export function SummaryMetricsGrid({ kpis, goals }: SummaryMetricsGridProps) {
 
           <View style={styles.metricArea}>
             <View style={styles.valueRow}>
-              <Typography variant="metricNumeralLg" style={styles.mainValue}>
+              <Typography
+                variant="metricNumeralLg"
+                style={styles.mainValue}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.7}>
                 {waterFormatted}
               </Typography>
               <Typography variant="labelSm" color={colors.secondary} style={styles.unitText}>
                 /dia
               </Typography>
             </View>
-            <Typography variant="labelSm" color={colors.onSurfaceVariant}>
+            <Typography variant="labelSm" color={colors.onSurfaceVariant} numberOfLines={1}>
               {t.analytics.avgWater}
             </Typography>
           </View>
 
-          <Typography variant="unitCaption" color={colors.onSurfaceVariant} style={styles.metaHint}>
+          <Typography variant="unitCaption" color={colors.onSurfaceVariant} style={styles.metaHint} numberOfLines={1}>
             Meta: {waterGoalFormatted}/dia
           </Typography>
         </View>
@@ -152,7 +163,8 @@ export function SummaryMetricsGrid({ kpis, goals }: SummaryMetricsGridProps) {
                 <Typography
                   variant="unitCaption"
                   color={colors.tertiaryContainer}
-                  style={styles.statusPillText}>
+                  style={styles.statusPillText}
+                  numberOfLines={1}>
                   {kpis.currentStreak}d streak
                 </Typography>
               </View>
@@ -161,16 +173,21 @@ export function SummaryMetricsGrid({ kpis, goals }: SummaryMetricsGridProps) {
 
           <View style={styles.metricArea}>
             <View style={styles.valueRow}>
-              <Typography variant="metricNumeralLg" style={styles.mainValue}>
+              <Typography
+                variant="metricNumeralLg"
+                style={styles.mainValue}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.7}>
                 {kpis.bothSuccessRate}%
               </Typography>
             </View>
-            <Typography variant="labelSm" color={colors.onSurfaceVariant}>
+            <Typography variant="labelSm" color={colors.onSurfaceVariant} numberOfLines={1}>
               {t.analytics.successRate}
             </Typography>
           </View>
 
-          <Typography variant="unitCaption" color={colors.onSurfaceVariant} style={styles.metaHint}>
+          <Typography variant="unitCaption" color={colors.onSurfaceVariant} style={styles.metaHint} numberOfLines={1}>
             Prot: {kpis.proteinSuccessRate}% • Água: {kpis.waterSuccessRate}%
           </Typography>
         </View>
@@ -182,7 +199,7 @@ export function SummaryMetricsGrid({ kpis, goals }: SummaryMetricsGridProps) {
               <Flame size={16} color={colors.tertiaryContainer} />
             </View>
             <View style={[styles.statusPill, { backgroundColor: colors.surfaceHigh }]}>
-              <Typography variant="unitCaption" color={colors.onSurfaceVariant} style={styles.statusPillText}>
+              <Typography variant="unitCaption" color={colors.onSurfaceVariant} style={styles.statusPillText} numberOfLines={1}>
                 {calorieDiff > 0 ? `+${calorieDiff}` : `${calorieDiff}`} kcal
               </Typography>
             </View>
@@ -190,19 +207,24 @@ export function SummaryMetricsGrid({ kpis, goals }: SummaryMetricsGridProps) {
 
           <View style={styles.metricArea}>
             <View style={styles.valueRow}>
-              <Typography variant="metricNumeralLg" style={styles.mainValue}>
+              <Typography
+                variant="metricNumeralLg"
+                style={styles.mainValue}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.7}>
                 {kpis.avgCaloriesKcal}
               </Typography>
               <Typography variant="labelSm" color={colors.tertiaryContainer} style={styles.unitText}>
                 kcal
               </Typography>
             </View>
-            <Typography variant="labelSm" color={colors.onSurfaceVariant}>
+            <Typography variant="labelSm" color={colors.onSurfaceVariant} numberOfLines={1}>
               {t.analytics.avgCalories}
             </Typography>
           </View>
 
-          <Typography variant="unitCaption" color={colors.onSurfaceVariant} style={styles.metaHint}>
+          <Typography variant="unitCaption" color={colors.onSurfaceVariant} style={styles.metaHint} numberOfLines={1}>
             Meta: {goals.caloriesGoal} kcal/dia
           </Typography>
         </View>
@@ -221,6 +243,7 @@ const styles = StyleSheet.create({
   },
   card: {
     flex: 1,
+    minWidth: 0,
     backgroundColor: colors.surfaceLow,
     borderRadius: radii.xl,
     padding: spacing.md,

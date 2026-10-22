@@ -1,4 +1,4 @@
-import { Bell, SlidersHorizontal, Zap } from 'lucide-react-native';
+import { SlidersHorizontal, Zap } from 'lucide-react-native';
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 
@@ -11,7 +11,6 @@ export interface HomeHeaderProps {
   dateTitle: string; // e.g. "Today, Oct 24"
   dayOfWeek: string; // e.g. "Thu"
   streakDays?: number;
-  onPressNotifications?: () => void;
   onPressTune?: () => void;
 }
 
@@ -19,14 +18,13 @@ export function HomeHeader({
   dateTitle,
   dayOfWeek,
   streakDays = 1,
-  onPressNotifications,
   onPressTune,
 }: HomeHeaderProps) {
   const { t } = useLanguage();
 
   return (
     <View style={styles.container}>
-      {/* Top Bar: Brand, Notifications, Profile */}
+      {/* Top Bar: Brand Logo & Title */}
       <View style={styles.topBar}>
         <View style={styles.brandRow}>
           <View style={styles.logoBadge}>
@@ -40,16 +38,6 @@ export function HomeHeader({
               {t.home.todayBadge}
             </Typography>
           </View>
-        </View>
-
-        <View style={styles.topActions}>
-          <IconButton
-            size={38}
-            backgroundColor={colors.surfaceContainer}
-            icon={<Bell size={18} color={colors.onSurfaceVariant} />}
-            onPress={onPressNotifications}
-            accessibilityLabel={t.home.notifications}
-          />
         </View>
       </View>
 

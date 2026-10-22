@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 
 import { Card } from '@/components/ui/Card';
@@ -31,6 +31,8 @@ export function DonutChartCard({
   goalLabel,
 }: DonutChartCardProps) {
   const { t } = useLanguage();
+  const { width: windowWidth } = useWindowDimensions();
+
   const percent = goal > 0 ? Math.min(Math.round((current / goal) * 100), 100) : 0;
   const rawRemaining = Math.max(goal - current, 0);
 
@@ -41,12 +43,22 @@ export function DonutChartCard({
   const displayCurrent = formatValue ? formatValue(current) : String(current);
   const displayGoal = formatValue ? formatValue(goal) : String(goal);
 
-  // SVG Donut geometry
-  const size = 112; // 28 * 4
-  const strokeWidth = 9;
+  // Cálculo dinâmico do diâmetro do Donut com base na largura da tela
+  // Layout da Home: 2 cards lado a lado com padding lateral de 16 cada lado (32) e gap de 12
+  // Padding interno de cada card: 16 de cada lado (32)
+  const availableCardWidth = (windowWidth - 44) / 2 - 32;
+  const size = Math.min(Math.max(Math.floor(availableCardWidth * 0.88), 108), 130);
+
+  // SVG Donut geometry (base 100x100 no viewBox)
+  const strokeWidthBase = 9;
+  const strokeWidthInPx = (strokeWidthBase / 100) * size;
   const radius = 40;
   const circumference = 2 * Math.PI * radius; // ~251.327
   const strokeDashoffset = circumference - (percent / 100) * circumference;
+
+  // Área segura interna do círculo para o texto (largura máxima inscrita para não tocar no anel)
+  const innerDiameter = size - strokeWidthInPx * 2;
+  const innerMaxWidth = Math.floor(innerDiameter * 0.72);
 
   return (
     <Card variant="low" glow={glow} style={styles.card}>
@@ -54,19 +66,19 @@ export function DonutChartCard({
       <View style={styles.header}>
         <View style={styles.labelRow}>
           <View style={[styles.statusDot, { backgroundColor: color }]} />
-          <Typography variant="labelMd" style={styles.title}>
+          <Typography variant="labelMd" style={styles.title} numberOfLines={1}>
             {label}
           </Typography>
         </View>
         <View style={[styles.percentBadge, { backgroundColor: `${color}20` }]}>
-          <Typography variant="unitCaption" color={color}>
+          <Typography variant="unitCaption" color={color} style={styles.percentText}>
             {percent}%
           </Typography>
         </View>
       </View>
 
       {/* Gráfico Circular de Rosca */}
-      <View style={styles.donutContainer}>
+      <View style={[styles.donutContainer, { width: size, height: size }]}>
         <Svg width={size} height={size} viewBox="0 0 100 100" style={styles.svg}>
           {/* Trilha de fundo */}
           <Circle
@@ -74,7 +86,7 @@ export function DonutChartCard({
             cy="50"
             r={radius}
             stroke={colors.surfaceContainer}
-            strokeWidth={strokeWidth}
+            strokeWidth={strokeWidthBase}
             fill="none"
           />
           {/* Barra de progresso */}
@@ -83,7 +95,7 @@ export function DonutChartCard({
             cy="50"
             r={radius}
             stroke={color}
-            strokeWidth={strokeWidth}
+            strokeWidth={strokeWidthBase}
             strokeDasharray={`${circumference} ${circumference}`}
             strokeDashoffset={strokeDashoffset}
             strokeLinecap="round"
@@ -91,23 +103,37 @@ export function DonutChartCard({
           />
         </Svg>
 
-        {/* Readout Central */}
-        <View style={styles.donutCenter}>
-          <Typography variant="metricNumeralLg" style={styles.remainingValue}>
-            {displayRemaining}
-            <Typography variant="labelSm" color={colors.onSurfaceVariant}>
-              {unit}
+        {/* Readout Central com área segura anti-colisão e auto-escala */}
+        <View style={styles.donutCenterWrapper} pointerEvents="none">
+          <View style={[styles.donutCenter, { width: innerMaxWidth }]}>
+            {/* Linha 1: Numeral principal com auto-escala */}
+            <Typography
+              variant="metricNumeralLg"
+              center
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.65}
+              style={styles.remainingNumber}>
+              {displayRemaining}
             </Typography>
-          </Typography>
-          <Typography variant="unitCaption" color={color} style={styles.leftLabel}>
-            {resolvedLeftLabel}
-          </Typography>
+
+            {/* Linha 2: Unidade e indicador 'RESTANTE' empilhados para não alargar a linha */}
+            <Typography
+              variant="unitCaption"
+              color={color}
+              center
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              style={styles.unitAndLeftLabel}>
+              {unit} {resolvedLeftLabel}
+            </Typography>
+          </View>
         </View>
       </View>
 
       {/* Meta e Consumo Atual */}
       <View style={styles.footerPill}>
-        <Typography variant="labelSm" color={colors.onSurfaceVariant} center>
+        <Typography variant="labelSm" color={colors.onSurfaceVariant} center numberOfLines={1}>
           <Typography variant="labelSm" color={colors.onSurface} style={styles.bold}>
             {displayCurrent}{unit}
           </Typography>
@@ -124,6 +150,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: spacing.md,
+    minWidth: 0, // Garante que o flex: 1 não transborde em flex row
   },
   header: {
     width: '100%',
@@ -136,6 +163,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs + 2,
+    flex: 1,
+    marginRight: 4,
   },
   statusDot: {
     width: 8,
@@ -150,27 +179,39 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: radii.full,
   },
+  percentText: {
+    fontWeight: '800',
+  },
   donutContainer: {
-    width: 112,
-    height: 112,
     alignItems: 'center',
     justifyContent: 'center',
     marginVertical: 4,
     position: 'relative',
   },
+  donutCenterWrapper: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   svg: {
     transform: [{ rotate: '-90deg' }],
   },
   donutCenter: {
-    position: 'absolute',
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 2,
   },
-  remainingValue: {
-    lineHeight: 30,
+  remainingNumber: {
+    fontWeight: '800',
+    lineHeight: 28,
   },
-  leftLabel: {
-    letterSpacing: 1,
+  unitAndLeftLabel: {
+    letterSpacing: 0.8,
+    fontWeight: '800',
     marginTop: 1,
   },
   footerPill: {
