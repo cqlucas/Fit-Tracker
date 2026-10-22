@@ -10,11 +10,13 @@ import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Typography } from '@/components/ui/Typography';
+import { useLanguage } from '@/context/LanguageContext';
 import { colors, radii, shadows, spacing } from '@/theme/tokens';
 
 type CustomTabBarProps = Parameters<NonNullable<React.ComponentProps<typeof Tabs>['tabBar']>>[0];
 
 function CustomTabBar({ state, descriptors, navigateToTab, insets }: CustomTabBarProps) {
+  const { t } = useLanguage();
   const bottomInset = insets?.bottom ?? 0;
 
   const tabIcons: Record<string, (color: string) => React.ReactNode> = {
@@ -26,11 +28,11 @@ function CustomTabBar({ state, descriptors, navigateToTab, insets }: CustomTabBa
   };
 
   const tabLabels: Record<string, string> = {
-    index: 'Today',
-    history: 'History',
-    'quick-log': 'Log',
-    analytics: 'Analytics',
-    settings: 'Settings',
+    index: t.tabs.today,
+    history: t.tabs.history,
+    'quick-log': t.tabs.log,
+    analytics: t.tabs.analytics,
+    settings: t.tabs.settings,
   };
 
   return (
@@ -97,17 +99,19 @@ function CustomTabBar({ state, descriptors, navigateToTab, insets }: CustomTabBa
 }
 
 export default function TabLayout() {
+  const { t } = useLanguage();
+
   return (
     <Tabs
       tabBar={(props) => <CustomTabBar {...props} />}
       screenOptions={{
         headerShown: false,
       }}>
-      <Tabs.Screen name="index" options={{ title: 'Today' }} />
-      <Tabs.Screen name="history" options={{ title: 'History' }} />
-      <Tabs.Screen name="quick-log" options={{ title: 'Log' }} />
-      <Tabs.Screen name="analytics" options={{ title: 'Analytics' }} />
-      <Tabs.Screen name="settings" options={{ title: 'Settings' }} />
+      <Tabs.Screen name="index" options={{ title: t.tabs.today }} />
+      <Tabs.Screen name="history" options={{ title: t.tabs.history }} />
+      <Tabs.Screen name="quick-log" options={{ title: t.tabs.log }} />
+      <Tabs.Screen name="analytics" options={{ title: t.tabs.analytics }} />
+      <Tabs.Screen name="settings" options={{ title: t.tabs.settings }} />
     </Tabs>
   );
 }

@@ -5,6 +5,7 @@ import React, { useEffect } from 'react';
 
 // Side-effect: abre o SQLite e roda migrations + seed de forma síncrona.
 import '@/db/client';
+import { LanguageProvider } from '@/context/LanguageContext';
 import { syncEngine } from '@/sync/sync.service';
 import { colors } from '@/theme/tokens';
 
@@ -30,11 +31,13 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <ThemeProvider value={customDarkTheme}>
-      <StatusBar style="light" />
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      </Stack>
-    </ThemeProvider>
+    <LanguageProvider>
+      <ThemeProvider value={customDarkTheme}>
+        <StatusBar style="light" />
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        </Stack>
+      </ThemeProvider>
+    </LanguageProvider>
   );
 }

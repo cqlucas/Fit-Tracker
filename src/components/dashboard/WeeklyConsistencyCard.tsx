@@ -4,6 +4,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { Card } from '@/components/ui/Card';
 import { Typography } from '@/components/ui/Typography';
+import { useLanguage } from '@/context/LanguageContext';
 import { colors, radii, spacing } from '@/theme/tokens';
 
 export interface WeeklyDayStatus {
@@ -24,6 +25,7 @@ export interface WeeklyConsistencyCardProps {
   accentColor?: string;
   containerColor?: string;
   days: WeeklyDayStatus[];
+  hitLabel?: string;
 }
 
 export function WeeklyConsistencyCard({
@@ -36,7 +38,11 @@ export function WeeklyConsistencyCard({
   accentColor = colors.primary,
   containerColor = colors.primaryContainer,
   days,
+  hitLabel,
 }: WeeklyConsistencyCardProps) {
+  const { t } = useLanguage();
+  const resolvedHitLabel = hitLabel ?? t.home.hitBadge;
+
   return (
     <Card variant="low" style={styles.card}>
       {/* Top Header */}
@@ -52,7 +58,7 @@ export function WeeklyConsistencyCard({
               </Typography>
               <View style={[styles.hitBadge, { backgroundColor: `${accentColor}25` }]}>
                 <Typography variant="unitCaption" color={accentColor} style={styles.hitText}>
-                  {hitCount}/{totalDays} Hit
+                  {hitCount}/{totalDays} {resolvedHitLabel}
                 </Typography>
               </View>
             </View>

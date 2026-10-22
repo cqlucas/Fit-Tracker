@@ -22,11 +22,13 @@ import {
   SkeletonWeeklyCard,
 } from '@/components/ui/Skeleton';
 import { Typography } from '@/components/ui/Typography';
+import { useLanguage } from '@/context/LanguageContext';
 import { useDashboardData } from '@/hooks/useDashboardData';
 import { colors, spacing } from '@/theme/tokens';
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { t, isPt } = useLanguage();
   const {
     isLoading,
     goals,
@@ -38,8 +40,6 @@ export default function HomeScreen() {
     refresh,
   } = useDashboardData();
 
-  const isPt = goals.language === 'pt';
-
   // Data formatada para o cabeçalho baseada no idioma selecionado
   const { dateTitle, dayOfWeek } = useMemo(() => {
     const now = new Date();
@@ -47,13 +47,12 @@ export default function HomeScreen() {
     const month = now.toLocaleDateString(locale, { month: 'short' });
     const day = now.getDate();
     const weekday = now.toLocaleDateString(locale, { weekday: 'short' });
-    const prefix = isPt ? 'Hoje' : 'Today';
 
     return {
-      dateTitle: `${prefix}, ${month} ${day}`,
+      dateTitle: `${t.home.todayPrefix}, ${month} ${day}`,
       dayOfWeek: weekday.charAt(0).toUpperCase() + weekday.slice(1),
     };
-  }, [isPt]);
+  }, [isPt, t]);
 
   const proteinDays = formatDaysForMacro('protein');
   const waterDays = formatDaysForMacro('water');
@@ -96,7 +95,7 @@ export default function HomeScreen() {
         ) : (
           <View style={styles.dualDonutRow}>
             <DonutChartCard
-              label={isPt ? 'Proteína' : 'Protein'}
+              label={t.home.protein}
               current={todayTotals.proteinConsumed}
               goal={goals.proteinGoal}
               unit="g"
@@ -104,7 +103,7 @@ export default function HomeScreen() {
               glow="primary"
             />
             <DonutChartCard
-              label={isPt ? 'Hidratação' : 'Hydration'}
+              label={t.home.hydration}
               current={todayTotals.waterConsumed}
               goal={goals.waterGoal}
               unit="ml"
@@ -139,10 +138,10 @@ export default function HomeScreen() {
             <View style={styles.sectionTitleRow}>
               <Award size={18} color={colors.primary} />
               <Typography variant="labelMd" style={styles.sectionTitle}>
-                {isPt ? 'Consistência Semanal' : 'Weekly Consistency'}
+                {t.home.weeklyTitle}
               </Typography>
             </View>
-            <Badge label={isPt ? 'Últimos 7 Dias' : 'Last 7 Days'} variant="subtle" />
+            <Badge label={t.home.last7Days} variant="subtle" />
           </View>
 
           {isLoading ? (
@@ -154,19 +153,11 @@ export default function HomeScreen() {
             <>
               {/* Consistência de Proteína */}
               <WeeklyConsistencyCard
-                title={isPt ? 'Meta de Proteína' : 'Protein Target'}
-                subtitle={
-                  isPt
-                    ? `Mínimo diário de ${goals.proteinGoal}g`
-                    : `Min daily threshold ${goals.proteinGoal}g`
-                }
+                title={t.home.proteinGoalTitle}
+                subtitle={t.home.proteinGoalSubtitle(goals.proteinGoal)}
                 hitCount={weeklyStats.proteinDaysHit}
                 totalDays={weeklyStats.totalDays}
-                averageText={
-                  isPt
-                    ? `Média: ${weeklyAverage.protein || 0}g/d`
-                    : `Avg. ${weeklyAverage.protein || 0}g/d`
-                }
+                averageText={t.home.avgProtein(weeklyAverage.protein || 0)}
                 icon={<Dumbbell size={16} color={colors.primary} strokeWidth={2.5} />}
                 accentColor={colors.primary}
                 containerColor={colors.primaryContainer}
@@ -175,15 +166,11 @@ export default function HomeScreen() {
 
               {/* Consistência de Hidratação */}
               <WeeklyConsistencyCard
-                title={isPt ? 'Sequência de Água' : 'Hydration Streak'}
-                subtitle={isPt ? 'Consistência diária' : 'Active streak'}
+                title={t.home.hydrationTitle}
+                subtitle={t.home.hydrationSubtitle}
                 hitCount={weeklyStats.waterDaysHit}
                 totalDays={weeklyStats.totalDays}
-                averageText={
-                  isPt
-                    ? `Média: ${weeklyAverage.water !== '0.0' ? weeklyAverage.water : '0.0'}L/d`
-                    : `Avg. ${weeklyAverage.water !== '0.0' ? weeklyAverage.water : '0.0'}L/d`
-                }
+                averageText={t.home.avgWater(weeklyAverage.water !== '0.0' ? weeklyAverage.water : '0.0')}
                 icon={<Droplets size={16} color={colors.secondary} strokeWidth={2.5} />}
                 accentColor={colors.secondary}
                 containerColor={colors.secondaryContainer}
@@ -200,7 +187,7 @@ export default function HomeScreen() {
               name={recentMeal.name}
               proteinG={recentMeal.proteinG}
               caloriesKcal={recentMeal.caloriesKcal}
-              timeString={isPt ? 'Registro recente' : 'Recent Log'}
+              timeString={t.home.recentLog}
               onPress={handleQuickLog}
             />
           </View>

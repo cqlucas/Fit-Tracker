@@ -3,14 +3,19 @@ import React from 'react';
 import { Pressable, StyleSheet, type ViewStyle } from 'react-native';
 
 import { Typography } from '@/components/ui/Typography';
+import { useLanguage } from '@/context/LanguageContext';
 import { colors, radii, shadows, spacing } from '@/theme/tokens';
 
 export interface QuickLogCTAProps {
   onPress?: () => void;
   style?: ViewStyle;
+  label?: string;
 }
 
-export function QuickLogCTA({ onPress, style }: QuickLogCTAProps) {
+export function QuickLogCTA({ onPress, style, label }: QuickLogCTAProps) {
+  const { t } = useLanguage();
+  const resolvedLabel = label ?? t.home.quickLogCTA;
+
   return (
     <Pressable
       onPress={onPress}
@@ -22,7 +27,7 @@ export function QuickLogCTA({ onPress, style }: QuickLogCTAProps) {
       ]}>
       <PlusCircle size={20} color={colors.onPrimaryContainer} strokeWidth={2.5} />
       <Typography variant="labelMd" color={colors.onPrimaryContainer} style={styles.text}>
-        + Log Food, Shake or Water
+        {resolvedLabel}
       </Typography>
     </Pressable>
   );

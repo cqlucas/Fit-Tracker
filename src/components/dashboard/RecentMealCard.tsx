@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Card } from '@/components/ui/Card';
 import { Typography } from '@/components/ui/Typography';
+import { useLanguage } from '@/context/LanguageContext';
 import { colors, radii, spacing } from '@/theme/tokens';
 
 export interface RecentMealCardProps {
@@ -18,9 +19,13 @@ export function RecentMealCard({
   name,
   proteinG,
   caloriesKcal,
-  timeString = 'Today',
+  timeString,
   onPress,
 }: RecentMealCardProps) {
+  const { t, isPt } = useLanguage();
+  const resolvedTimeString = timeString ?? t.home.todayPrefix;
+  const proteinUnit = isPt ? 'Proteína' : 'Protein';
+
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [pressed && styles.pressed]}>
       <Card variant="low" style={styles.card}>
@@ -33,7 +38,7 @@ export function RecentMealCard({
               {name}
             </Typography>
             <Typography variant="unitCaption" color={colors.onSurfaceVariant} style={styles.details}>
-              {timeString} • {proteinG}g Protein • {caloriesKcal} kcal
+              {resolvedTimeString} • {proteinG}g {proteinUnit} • {caloriesKcal} kcal
             </Typography>
           </View>
         </View>

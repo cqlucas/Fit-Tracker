@@ -4,6 +4,7 @@ import Svg, { Circle } from 'react-native-svg';
 
 import { Card } from '@/components/ui/Card';
 import { Typography } from '@/components/ui/Typography';
+import { useLanguage } from '@/context/LanguageContext';
 import { colors, radii, spacing } from '@/theme/tokens';
 
 export interface DonutChartCardProps {
@@ -14,6 +15,8 @@ export interface DonutChartCardProps {
   color?: string;
   glow?: 'primary' | 'secondary';
   formatValue?: (val: number) => string;
+  leftLabel?: string;
+  goalLabel?: string;
 }
 
 export function DonutChartCard({
@@ -24,9 +27,15 @@ export function DonutChartCard({
   color = colors.primary,
   glow = 'primary',
   formatValue,
+  leftLabel,
+  goalLabel,
 }: DonutChartCardProps) {
+  const { t } = useLanguage();
   const percent = goal > 0 ? Math.min(Math.round((current / goal) * 100), 100) : 0;
   const rawRemaining = Math.max(goal - current, 0);
+
+  const resolvedLeftLabel = leftLabel ?? t.home.left;
+  const resolvedGoalLabel = goalLabel ?? t.home.goal;
 
   const displayRemaining = formatValue ? formatValue(rawRemaining) : String(rawRemaining);
   const displayCurrent = formatValue ? formatValue(current) : String(current);
@@ -91,7 +100,7 @@ export function DonutChartCard({
             </Typography>
           </Typography>
           <Typography variant="unitCaption" color={color} style={styles.leftLabel}>
-            LEFT
+            {resolvedLeftLabel}
           </Typography>
         </View>
       </View>
@@ -102,7 +111,7 @@ export function DonutChartCard({
           <Typography variant="labelSm" color={colors.onSurface} style={styles.bold}>
             {displayCurrent}{unit}
           </Typography>
-          {' '}/ {displayGoal}{unit} Goal
+          {' '}/ {displayGoal}{unit} {resolvedGoalLabel}
         </Typography>
       </View>
     </Card>

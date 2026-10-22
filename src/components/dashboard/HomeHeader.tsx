@@ -4,6 +4,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { IconButton } from '@/components/ui/IconButton';
 import { Typography } from '@/components/ui/Typography';
+import { useLanguage } from '@/context/LanguageContext';
 import { colors, radii, spacing } from '@/theme/tokens';
 
 export interface HomeHeaderProps {
@@ -23,6 +24,8 @@ export function HomeHeader({
   onPressNotifications,
   onPressTune,
 }: HomeHeaderProps) {
+  const { t } = useLanguage();
+
   return (
     <View style={styles.container}>
       {/* Top Bar: Brand, Notifications, Profile */}
@@ -36,7 +39,7 @@ export function HomeHeader({
               NutriPulse
             </Typography>
             <Typography variant="unitCaption" color={colors.primary} style={styles.brandSubtitle}>
-              TODAY
+              {t.home.todayBadge}
             </Typography>
           </View>
         </View>
@@ -47,7 +50,7 @@ export function HomeHeader({
             backgroundColor={colors.surfaceContainer}
             icon={<Bell size={18} color={colors.onSurfaceVariant} />}
             onPress={onPressNotifications}
-            accessibilityLabel="Notifications"
+            accessibilityLabel={t.home.notifications}
           />
           <IconButton
             size={38}
@@ -55,7 +58,7 @@ export function HomeHeader({
             borderColor={`${colors.primary}40`}
             icon={<SlidersHorizontal size={18} color={colors.primary} />}
             onPress={onPressSettings}
-            accessibilityLabel="Settings"
+            accessibilityLabel={t.tabs.settings}
           />
         </View>
       </View>
@@ -77,7 +80,7 @@ export function HomeHeader({
           <View style={styles.streakRow}>
             <View style={styles.pulseDot} />
             <Typography variant="labelSm" color={colors.primary}>
-              Metabolic window active • Day {streakDays} Streak
+              {t.home.streakActive(streakDays)}
             </Typography>
           </View>
         </View>
@@ -87,7 +90,7 @@ export function HomeHeader({
           backgroundColor={colors.surfaceContainer}
           icon={<SlidersHorizontal size={18} color={colors.onSurfaceVariant} />}
           onPress={onPressTune}
-          accessibilityLabel="Adjust Target"
+          accessibilityLabel={t.home.adjustTarget}
         />
       </View>
     </View>

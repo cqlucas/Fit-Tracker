@@ -2,6 +2,7 @@ import { useFocusEffect } from 'expo-router';
 import { addDatabaseChangeListener } from 'expo-sqlite';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { useLanguage } from '@/context/LanguageContext';
 import {
   goalsRepository,
   type Goals,
@@ -56,6 +57,7 @@ export interface TodayTotals {
 }
 
 export function useDashboardData() {
+  const { isPt: contextIsPt } = useLanguage();
   const [isLoading, setIsLoading] = useState(true);
   const [dailySummary, setDailySummary] = useState<DailySummary | null>(null);
   const [weeklyConsistency, setWeeklyConsistency] = useState<WeeklyConsistency | null>(null);
@@ -129,7 +131,7 @@ export function useDashboardData() {
   };
 
   // Estatísticas semanais estruturadas
-  const isPt = goals.language === 'pt';
+  const isPt = contextIsPt;
   const dayLabels = isPt ? DAY_LABELS_PT : DAY_LABELS_EN;
 
   const weeklyStats: WeeklyStats = {

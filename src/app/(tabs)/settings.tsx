@@ -18,16 +18,18 @@ import { SettingsHeader } from '@/components/settings/SettingsHeader';
 import { StaticReminderCard } from '@/components/settings/StaticReminderCard';
 import { StatusSyncCard } from '@/components/settings/StatusSyncCard';
 import { WaterGoalCard } from '@/components/settings/WaterGoalCard';
+import { useLanguage } from '@/context/LanguageContext';
 import { DEFAULT_GOALS, goalsRepository } from '@/repositories/goals.repository';
 import { colors, spacing } from '@/theme/tokens';
 
 export default function SettingsScreen() {
   const router = useRouter();
+  const { setLanguage: setGlobalLanguage, language: currentGlobalLang, t } = useLanguage();
 
   // Estados locais do formulário de metas
   const [proteinInput, setProteinInput] = useState('160');
   const [waterInput, setWaterInput] = useState('3000');
-  const [language, setLanguage] = useState<'pt' | 'en'>('pt');
+  const [language, setLanguage] = useState<'pt' | 'en'>(currentGlobalLang);
 
   const [isSaving, setIsSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
@@ -44,7 +46,9 @@ export default function SettingsScreen() {
           if (isMounted) {
             setProteinInput(String(current.proteinGoal));
             setWaterInput(String(current.waterGoal));
-            setLanguage(current.language ?? 'pt');
+            const lang = current.language ?? 'pt';
+            setLanguage(lang);
+            void setGlobalLanguage(lang);
           }
         })
         .catch((err) => {
@@ -54,14 +58,21 @@ export default function SettingsScreen() {
       return () => {
         isMounted = false;
       };
-    }, []),
+    }, [setGlobalLanguage]),
   );
+
+  // Troca de idioma imediata
+  const handleSelectLanguage = (newLang: 'pt' | 'en') => {
+    setLanguage(newLang);
+    void setGlobalLanguage(newLang);
+  };
 
   // Reseta para os valores padrões de fábrica
   const handleReset = () => {
     setProteinInput(String(DEFAULT_GOALS.proteinGoal));
     setWaterInput(String(DEFAULT_GOALS.waterGoal));
     setLanguage(DEFAULT_GOALS.language);
+    void setGlobalLanguage(DEFAULT_GOALS.language);
   };
 
   // Salva no SQLite com validações estritas
@@ -70,22 +81,12 @@ export default function SettingsScreen() {
     const waterNum = parseInt(waterInput, 10);
 
     if (isNaN(proteinNum) || proteinNum <= 0) {
-      Alert.alert(
-        isPt ? 'Valor Inválido' : 'Invalid Value',
-        isPt
-          ? 'Por favor, insira uma meta válida de proteína (maior que 0g).'
-          : 'Please enter a valid protein target (greater than 0g).',
-      );
+      Alert.alert(t.settings.invalidTitle, t.settings.invalidProtein);
       return;
     }
 
     if (isNaN(waterNum) || waterNum <= 0) {
-      Alert.alert(
-        isPt ? 'Valor Inválido' : 'Invalid Value',
-        isPt
-          ? 'Por favor, insira uma meta válida de água (maior que 0ml).'
-          : 'Please enter a valid water target (greater than 0ml).',
-      );
+      Alert.alert(t.settings.invalidTitle, t.settings.invalidWater);
       return;
     }
 
@@ -104,12 +105,7 @@ export default function SettingsScreen() {
         setIsSaved(false);
       }, 2000);
     } catch (err) {
-      Alert.alert(
-        isPt ? 'Erro ao Salvar' : 'Error Saving',
-        isPt
-          ? 'Não foi possível persistir as metas no banco local.'
-          : 'Could not persist goals to local database.',
-      );
+      Alert.alert(t.settings.errorTitle, t.settings.errorMessage);
       if (__DEV__) console.warn('[SettingsScreen] Erro ao salvar:', err);
     } finally {
       setIsSaving(false);
@@ -160,7 +156,7 @@ export default function SettingsScreen() {
           {/* 4. Seletor de Idioma: Alternar entre PT-BR e EN */}
           <LanguageSelectorCard
             language={language}
-            onSelectLanguage={setLanguage}
+            onSelectLanguage={handleSelectLanguage}
           />
 
           {/* 5. Lembrete Estático: Prévia visual sem push nativo */}

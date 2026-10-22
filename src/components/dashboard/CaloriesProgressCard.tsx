@@ -5,6 +5,7 @@ import { StyleSheet, View } from 'react-native';
 import { Card } from '@/components/ui/Card';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { Typography } from '@/components/ui/Typography';
+import { useLanguage } from '@/context/LanguageContext';
 import { colors, radii, spacing } from '@/theme/tokens';
 
 export interface CaloriesProgressCardProps {
@@ -13,10 +14,12 @@ export interface CaloriesProgressCardProps {
 }
 
 export function CaloriesProgressCard({ consumed, goal }: CaloriesProgressCardProps) {
+  const { t, isPt } = useLanguage();
   const percent = goal > 0 ? Math.min(Math.round((consumed / goal) * 100), 100) : 0;
   const remaining = Math.max(goal - consumed, 0);
 
-  const formatNumber = (num: number) => num.toLocaleString('en-US');
+  const locale = isPt ? 'pt-BR' : 'en-US';
+  const formatNumber = (num: number) => num.toLocaleString(locale);
 
   return (
     <Card variant="low" glow="tertiary" style={styles.card}>
@@ -28,10 +31,10 @@ export function CaloriesProgressCard({ consumed, goal }: CaloriesProgressCardPro
           </View>
           <View>
             <Typography variant="labelMd" style={styles.title}>
-              Active Energy & Calories
+              {t.home.caloriesTitle}
             </Typography>
             <Typography variant="unitCaption" color={colors.onSurfaceVariant} style={styles.subtitle}>
-              DYNAMIC DEFICIT TARGET
+              {t.home.caloriesSubtitle}
             </Typography>
           </View>
         </View>
@@ -41,7 +44,7 @@ export function CaloriesProgressCard({ consumed, goal }: CaloriesProgressCardPro
             {formatNumber(remaining)}
           </Typography>
           <Typography variant="labelSm" color={colors.onSurfaceVariant}>
-            kcal left
+            {t.home.kcalLeft}
           </Typography>
         </View>
       </View>
@@ -63,12 +66,12 @@ export function CaloriesProgressCard({ consumed, goal }: CaloriesProgressCardPro
             <Typography variant="labelMd" color={colors.onSurface} style={styles.bold}>
               {formatNumber(consumed)}
             </Typography>
-            {' '}kcal consumed
+            {' '}{t.home.kcalConsumed}
           </Typography>
         </View>
 
         <Typography variant="labelSm" color={colors.onSurfaceVariant} style={styles.goalText}>
-          Goal: {formatNumber(goal)} kcal
+          {t.home.goalCalories(formatNumber(goal))}
         </Typography>
       </View>
     </Card>
