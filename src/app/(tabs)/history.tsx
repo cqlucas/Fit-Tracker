@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import React from 'react';
 import {
   ActivityIndicator,
@@ -15,6 +16,7 @@ import { HistorySectionHeader } from '@/components/history/HistorySectionHeader'
 import { Typography } from '@/components/ui/Typography';
 import { useLanguage } from '@/context/LanguageContext';
 import { useLogsHistory } from '@/hooks/useLogsHistory';
+import { UnifiedLogItem } from '@/repositories/logs.repository';
 import { colors, radii, spacing } from '@/theme/tokens';
 
 export default function HistoryScreen() {
@@ -36,6 +38,14 @@ export default function HistoryScreen() {
     deleteItem,
     refresh,
   } = useLogsHistory();
+
+  const handleEdit = (item: UnifiedLogItem) => {
+    if (item.type === 'water') {
+      router.push({ pathname: '/add-water', params: { id: item.id } });
+    } else {
+      router.push({ pathname: '/add-food', params: { id: item.id } });
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
@@ -74,7 +84,11 @@ export default function HistoryScreen() {
         sections={sections}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <HistoryLogItemCard item={item} onDelete={deleteItem} />
+          <HistoryLogItemCard
+            item={item}
+            onDelete={deleteItem}
+            onEdit={handleEdit}
+          />
         )}
         renderSectionHeader={({ section }) => (
           <HistorySectionHeader

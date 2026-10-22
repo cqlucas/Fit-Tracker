@@ -26,12 +26,27 @@ export interface AddWaterInput {
   dateKey?: string;
 }
 
+export interface UpdateWaterInput {
+  amountMl: number;
+  dateKey?: string;
+}
+
 export interface AddFoodInput {
   name: string;
   proteinG: number;
   caloriesKcal: number;
   entryMethod?: EntryMethod;
   mealWindow?: MealWindow;
+  dateKey?: string;
+}
+
+export interface UpdateFoodInput {
+  name: string;
+  proteinG: number;
+  caloriesKcal: number;
+  mealWindow?: MealWindow;
+  imageUri?: string | null;
+  entryMethod?: EntryMethod;
   dateKey?: string;
 }
 
@@ -251,6 +266,68 @@ async function deleteLog(id: string, type: 'water' | 'food'): Promise<void> {
   } else {
     await removeFood(id);
   }
+}
+
+async function getWaterLogById(id: string): Promise<WaterLog | null> {
+  const [row] = await db
+    .select()
+    .from(waterLogs)
+    .where(and(eq(waterLogs.id, id), notDeletedWater))
+    .limit(1);
+
+  return row ?? null;
+}
+
+async function getFoodLogById(id: string): Promise<FoodLog | null> {
+  const [row] = await db
+    .select()
+    .from(foodLogs)
+    .where(and(eq(foodLogs.id, id), notDeletedFood))
+    .limit(1);
+
+  return row ?? null;
+}
+
+async function updateWaterLog(id: string, input: UpdateWaterInput): Promise<WaterLog | null> {
+  assertPositiveInt(input.amountMl, 'amountMl');
+  const now = nowIso();
+
+  const [row] = await db
+    .update(waterLogs)
+    .set({
+      amountMl: input.amountMl,
+      ...(input.dateKey ? { dateKey: resolveDateKey(input.dateKey) } : {}),
+      updatedAt: now,
+      isSynced: false,
+    })
+    .where(and(eq(waterLogs.id, id), notDeletedWater))
+    .returning();
+
+  return row ?? null;
+}
+
+async function updateFoodLog(id: string, input: UpdateFoodInput): Promise<FoodLog | null> {
+  assertNonEmpty(input.name, 'name');
+  assertNonNegativeNumber(input.proteinG, 'proteinG');
+  assertNonNegativeNumber(input.caloriesKcal, 'caloriesKcal');
+  const now = nowIso();
+
+  const [row] = await db
+    .update(foodLogs)
+    .set({
+      name: input.name.trim(),
+      proteinG: round1(input.proteinG),
+      caloriesKcal: Math.round(input.caloriesKcal),
+      ...(input.mealWindow ? { mealWindow: input.mealWindow } : {}),
+      ...(input.entryMethod ? { entryMethod: input.entryMethod } : {}),
+      ...(input.dateKey ? { dateKey: resolveDateKey(input.dateKey) } : {}),
+      updatedAt: now,
+      isSynced: false,
+    })
+    .where(and(eq(foodLogs.id, id), notDeletedFood))
+    .returning();
+
+  return row ?? null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -679,6 +756,10 @@ export const logsRepository = {
   addWaterLog: addWater,
   addFood,
   addFoodLog: addFood,
+  getWaterLogById,
+  getFoodLogById,
+  updateWaterLog,
+  updateFoodLog,
   removeWater,
   removeFood,
   deleteLog,

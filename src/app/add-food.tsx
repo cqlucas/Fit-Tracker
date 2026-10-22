@@ -1,6 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
-import { router } from 'expo-router';
-import React, { useState } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import React, { useEffect, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -25,6 +25,8 @@ import { toDateKey } from '@/utils/date';
 
 export default function AddFoodScreen() {
   const { isPt } = useLanguage();
+  const { id } = useLocalSearchParams<{ id?: string }>();
+  const isEditMode = Boolean(id);
 
   // Estados locais do formulário de comida
   const [mealName, setMealName] = useState('');
@@ -32,11 +34,36 @@ export default function AddFoodScreen() {
   const [caloriesKcal, setCaloriesKcal] = useState(0);
   const [mealWindow, setMealWindow] = useState<MealWindow>('lunch');
   const [imageUri, setImageUri] = useState<string | null>(null);
+  const [existingDateKey, setExistingDateKey] = useState<string | undefined>(undefined);
 
   // Estados de carregamento e feedback
   const [isAnalyzingImage, setIsAnalyzingImage] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
+
+  // Carrega registro existente se for modo de edição
+  useEffect(() => {
+    if (!id) return;
+    let isMounted = true;
+    async function loadFoodLog() {
+      try {
+        const log = await logsRepository.getFoodLogById(id!);
+        if (log && isMounted) {
+          setMealName(log.name);
+          setProteinG(log.proteinG);
+          setCaloriesKcal(log.caloriesKcal);
+          setMealWindow(log.mealWindow);
+          setExistingDateKey(log.dateKey);
+        }
+      } catch (err) {
+        console.warn('[AddFoodScreen] Erro ao carregar refeição para edição:', err);
+      }
+    }
+    loadFoodLog();
+    return () => {
+      isMounted = false;
+    };
+  }, [id]);
 
   // Processa a imagem capturada com o Gemini
   const processSelectedImage = async (asset: ImagePicker.ImagePickerAsset) => {
@@ -199,14 +226,25 @@ export default function AddFoodScreen() {
     setIsSaving(true);
 
     try {
-      await logsRepository.addFood({
-        name: trimmedName,
-        proteinG,
-        caloriesKcal,
-        entryMethod: imageUri ? 'image' : 'manual',
-        mealWindow,
-        dateKey: toDateKey(),
-      });
+      if (isEditMode && id) {
+        await logsRepository.updateFoodLog(id, {
+          name: trimmedName,
+          proteinG,
+          caloriesKcal,
+          mealWindow,
+          entryMethod: imageUri ? 'image' : undefined,
+          dateKey: existingDateKey,
+        });
+      } else {
+        await logsRepository.addFood({
+          name: trimmedName,
+          proteinG,
+          caloriesKcal,
+          entryMethod: imageUri ? 'image' : 'manual',
+          mealWindow,
+          dateKey: toDateKey(),
+        });
+      }
 
       setIsSaved(true);
 
@@ -218,16 +256,24 @@ export default function AddFoodScreen() {
         }
       }, 700);
     } catch (err: any) {
-      console.error('[AddFoodScreen] Falha ao registrar refeição:', err);
+      console.error('[AddFoodScreen] Falha ao salvar refeição:', err);
       Alert.alert(
         isPt ? 'Erro ao Salvar' : 'Error Saving',
         isPt
-          ? 'Ocorreu um erro ao registrar a refeição no banco de dados local.'
+          ? 'Ocorreu um erro ao salvar a refeição no banco de dados local.'
           : 'An error occurred while saving the meal to the local database.'
       );
       setIsSaving(false);
     }
   };
+
+  const screenTitle = isEditMode
+    ? isPt
+      ? 'Editar Refeição'
+      : 'Edit Meal'
+    : isPt
+    ? 'Registrar Refeição'
+    : 'Quick Log';
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right', 'bottom']}>
@@ -240,7 +286,7 @@ export default function AddFoodScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled">
           {/* Cabeçalho superior com botão voltar */}
-          <FoodHeader title={isPt ? 'Registrar Refeição' : 'Quick Log'} />
+          <FoodHeader title={screenTitle} />
 
           {/* Área Superior: Câmera / Escanear com IA Opcional */}
           <FoodImagePickerCard
@@ -272,12 +318,13 @@ export default function AddFoodScreen() {
           {/* Card de Índice de Equilíbrio Metabólico */}
           <MetabolicScoreCard score={proteinG > 30 ? 94 : 82} isPt={isPt} />
 
-          {/* Botão de Ação: Registrar Refeição nas Metas */}
+          {/* Botão de Ação: Registrar / Salvar Alterações */}
           <SaveFoodButton
             onPress={handleSave}
             isLoading={isSaving}
             isSaved={isSaved}
             isPt={isPt}
+            isEditMode={isEditMode}
           />
         </ScrollView>
       </KeyboardAvoidingView>

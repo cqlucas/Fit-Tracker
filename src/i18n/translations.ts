@@ -94,6 +94,11 @@ export interface TranslationSchema {
     deleteConfirm: string;
     cancel: string;
     delete: string;
+    edit: string;
+    editWaterTitle: string;
+    editFoodTitle: string;
+    saveChanges: string;
+    changesSaved: string;
     emptyTitle: string;
     emptySubtitle: string;
     clearFilters: string;
@@ -239,6 +244,11 @@ export const translations: Record<AppLanguage, TranslationSchema> = {
       deleteConfirm: 'Deseja realmente remover este registro? O histórico e as metas serão recalculados.',
       cancel: 'Cancelar',
       delete: 'Excluir',
+      edit: 'Editar',
+      editWaterTitle: 'Editar Registro de Água',
+      editFoodTitle: 'Editar Refeição',
+      saveChanges: 'Salvar Alterações',
+      changesSaved: 'Alterações Salvas!',
       emptyTitle: 'Nenhum registro encontrado',
       emptySubtitle: 'Tente alterar os filtros de busca ou adicione um novo registro pelo botão +.',
       clearFilters: 'Limpar filtros',
@@ -382,6 +392,11 @@ export const translations: Record<AppLanguage, TranslationSchema> = {
       deleteConfirm: 'Are you sure you want to delete this record? Totals will be updated immediately.',
       cancel: 'Cancel',
       delete: 'Delete',
+      edit: 'Edit',
+      editWaterTitle: 'Edit Water Log',
+      editFoodTitle: 'Edit Meal',
+      saveChanges: 'Save Changes',
+      changesSaved: 'Changes Saved!',
       emptyTitle: 'No logs found',
       emptySubtitle: 'Try adjusting your search filters or log an entry using the + button.',
       clearFilters: 'Clear filters',

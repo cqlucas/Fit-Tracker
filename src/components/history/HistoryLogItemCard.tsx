@@ -1,6 +1,7 @@
 import {
   Camera,
   Droplets,
+  Pencil,
   Trash2,
   Utensils,
 } from 'lucide-react-native';
@@ -21,9 +22,10 @@ import { colors, radii, shadows, spacing } from '@/theme/tokens';
 export interface HistoryLogItemCardProps {
   item: UnifiedLogItem;
   onDelete: (id: string, type: 'water' | 'food') => void;
+  onEdit?: (item: UnifiedLogItem) => void;
 }
 
-export function HistoryLogItemCard({ item, onDelete }: HistoryLogItemCardProps) {
+export function HistoryLogItemCard({ item, onDelete, onEdit }: HistoryLogItemCardProps) {
   const { t, isPt } = useLanguage();
 
   const formatTime = (isoString: string): string => {
@@ -70,7 +72,12 @@ export function HistoryLogItemCard({ item, onDelete }: HistoryLogItemCardProps) 
 
   if (item.type === 'food') {
     return (
-      <View style={styles.card}>
+      <Pressable
+        onPress={() => onEdit?.(item)}
+        style={({ pressed }) => [
+          styles.card,
+          onEdit && pressed && styles.cardPressed,
+        ]}>
         <View style={styles.leftRow}>
           {/* Ícone de Comida ou Câmera */}
           <View style={[styles.iconBox, styles.foodIconBox]}>
@@ -102,7 +109,7 @@ export function HistoryLogItemCard({ item, onDelete }: HistoryLogItemCardProps) 
           </View>
         </View>
 
-        {/* Lado Direito: Macros e Excluir */}
+        {/* Lado Direito: Macros e Ações */}
         <View style={styles.rightGroup}>
           <View style={styles.macrosCol}>
             <View style={styles.macroPill}>
@@ -124,23 +131,41 @@ export function HistoryLogItemCard({ item, onDelete }: HistoryLogItemCardProps) 
             </View>
           </View>
 
-          {/* Botão de Excluir */}
-          <Pressable
-            onPress={handleDeletePress}
-            accessibilityRole="button"
-            accessibilityLabel={t.history.delete}
-            hitSlop={8}
-            style={({ pressed }) => [styles.trashBtn, pressed && styles.pressed]}>
-            <Trash2 size={16} color={colors.error || '#ffb4ab'} />
-          </Pressable>
+          {/* Ações: Editar e Excluir */}
+          <View style={styles.actionButtonsRow}>
+            {onEdit && (
+              <Pressable
+                onPress={() => onEdit(item)}
+                accessibilityRole="button"
+                accessibilityLabel={t.history.edit}
+                hitSlop={6}
+                style={({ pressed }) => [styles.actionBtn, pressed && styles.pressed]}>
+                <Pencil size={15} color={colors.onSurfaceVariant} />
+              </Pressable>
+            )}
+
+            <Pressable
+              onPress={handleDeletePress}
+              accessibilityRole="button"
+              accessibilityLabel={t.history.delete}
+              hitSlop={6}
+              style={({ pressed }) => [styles.actionBtn, pressed && styles.pressed]}>
+              <Trash2 size={15} color={colors.error || '#ffb4ab'} />
+            </Pressable>
+          </View>
         </View>
-      </View>
+      </Pressable>
     );
   }
 
   // Card de Água
   return (
-    <View style={styles.card}>
+    <Pressable
+      onPress={() => onEdit?.(item)}
+      style={({ pressed }) => [
+        styles.card,
+        onEdit && pressed && styles.cardPressed,
+      ]}>
       <View style={styles.leftRow}>
         {/* Ícone de Água */}
         <View style={[styles.iconBox, styles.waterIconBox]}>
@@ -167,7 +192,7 @@ export function HistoryLogItemCard({ item, onDelete }: HistoryLogItemCardProps) 
         </View>
       </View>
 
-      {/* Lado Direito: Volume e Excluir */}
+      {/* Lado Direito: Volume e Ações */}
       <View style={styles.rightGroup}>
         <View style={styles.waterAmountBox}>
           <Typography variant="metricNumeralSm" color={colors.secondary} style={styles.waterNumber}>
@@ -178,17 +203,30 @@ export function HistoryLogItemCard({ item, onDelete }: HistoryLogItemCardProps) 
           </Typography>
         </View>
 
-        {/* Botão de Excluir */}
-        <Pressable
-          onPress={handleDeletePress}
-          accessibilityRole="button"
-          accessibilityLabel={t.history.delete}
-          hitSlop={8}
-          style={({ pressed }) => [styles.trashBtn, pressed && styles.pressed]}>
-          <Trash2 size={16} color={colors.error || '#ffb4ab'} />
-        </Pressable>
+        {/* Ações: Editar e Excluir */}
+        <View style={styles.actionButtonsRow}>
+          {onEdit && (
+            <Pressable
+              onPress={() => onEdit(item)}
+              accessibilityRole="button"
+              accessibilityLabel={t.history.edit}
+              hitSlop={6}
+              style={({ pressed }) => [styles.actionBtn, pressed && styles.pressed]}>
+              <Pencil size={15} color={colors.onSurfaceVariant} />
+            </Pressable>
+          )}
+
+          <Pressable
+            onPress={handleDeletePress}
+            accessibilityRole="button"
+            accessibilityLabel={t.history.delete}
+            hitSlop={6}
+            style={({ pressed }) => [styles.actionBtn, pressed && styles.pressed]}>
+            <Trash2 size={15} color={colors.error || '#ffb4ab'} />
+          </Pressable>
+        </View>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -205,6 +243,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.strokeSubtle,
     ...shadows.card,
+  },
+  cardPressed: {
+    borderColor: colors.strokeCrisp,
+    opacity: 0.9,
   },
   leftRow: {
     flexDirection: 'row',
@@ -261,7 +303,7 @@ const styles = StyleSheet.create({
   rightGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm + 2,
+    gap: spacing.sm,
   },
   macrosCol: {
     alignItems: 'flex-end',
@@ -285,7 +327,13 @@ const styles = StyleSheet.create({
   waterNumber: {
     fontWeight: '800',
   },
-  trashBtn: {
+  actionButtonsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginLeft: 4,
+  },
+  actionBtn: {
     width: 32,
     height: 32,
     borderRadius: radii.full,
@@ -298,3 +346,4 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.92 }],
   },
 });
+

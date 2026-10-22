@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
   Alert,
@@ -23,13 +23,37 @@ import { toDateKey } from '@/utils/date';
 
 export default function AddWaterScreen() {
   const { isPt } = useLanguage();
+  const { id } = useLocalSearchParams<{ id?: string }>();
+  const isEditMode = Boolean(id);
 
   // Estados locais do formulário de água
   const [intakeVolume, setIntakeVolume] = useState(500);
+  const [existingDateKey, setExistingDateKey] = useState<string | undefined>(undefined);
   const [baseTodayConsumed, setBaseTodayConsumed] = useState(0);
   const [dailyWaterGoal, setDailyWaterGoal] = useState(3000);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
+
+  // Carrega registro existente se for modo de edição
+  useEffect(() => {
+    if (!id) return;
+    let isMounted = true;
+    async function loadWaterLog() {
+      try {
+        const log = await logsRepository.getWaterLogById(id!);
+        if (log && isMounted) {
+          setIntakeVolume(log.amountMl);
+          setExistingDateKey(log.dateKey);
+        }
+      } catch (err) {
+        console.warn('[AddWater] Erro ao carregar registro para edição:', err);
+      }
+    }
+    loadWaterLog();
+    return () => {
+      isMounted = false;
+    };
+  }, [id]);
 
   // Carrega consumo real do dia e meta para o cálculo de telemetria
   useEffect(() => {
@@ -79,10 +103,17 @@ export default function AddWaterScreen() {
     setIsLoading(true);
 
     try {
-      await logsRepository.addWater({
-        amountMl: intakeVolume,
-        dateKey: toDateKey(),
-      });
+      if (isEditMode && id) {
+        await logsRepository.updateWaterLog(id, {
+          amountMl: intakeVolume,
+          dateKey: existingDateKey,
+        });
+      } else {
+        await logsRepository.addWater({
+          amountMl: intakeVolume,
+          dateKey: toDateKey(),
+        });
+      }
 
       setIsSaved(true);
 
@@ -96,14 +127,22 @@ export default function AddWaterScreen() {
     } catch (err: any) {
       console.error('[AddWater] Falha ao salvar registro de água:', err);
       Alert.alert(
-        isPt ? 'Erro ao Registrar' : 'Failed to Save',
+        isPt ? 'Erro ao Salvar' : 'Failed to Save',
         isPt
-          ? 'Ocorreu um erro ao registrar a água no banco de dados local.'
+          ? 'Ocorreu um erro ao salvar a água no banco de dados local.'
           : 'An error occurred while saving the water intake to local database.'
       );
       setIsLoading(false);
     }
   };
+
+  const screenTitle = isEditMode
+    ? isPt
+      ? 'Editar Registro de Água'
+      : 'Edit Water Log'
+    : isPt
+    ? 'Registrar Água'
+    : 'Quick Log';
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right', 'bottom']}>
@@ -112,7 +151,7 @@ export default function AddWaterScreen() {
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={false}>
         {/* Cabeçalho superior com botão voltar */}
-        <WaterHeader title={isPt ? 'Registrar Água' : 'Quick Log'} />
+        <WaterHeader title={screenTitle} />
 
         {/* Console Card de Hidratação com Glow e Glass Visual */}
         <View style={styles.consoleCard}>
@@ -127,7 +166,13 @@ export default function AddWaterScreen() {
           {/* Sub Header */}
           <View style={styles.subHeader}>
             <Typography variant="unitCaption" color={colors.secondary} style={styles.tagline}>
-              {isPt ? 'RASTREAMENTO RÁPIDO' : 'FAST TRACKING'}
+              {isEditMode
+                ? isPt
+                  ? 'MODO DE EDIÇÃO'
+                  : 'EDIT MODE'
+                : isPt
+                ? 'RASTREAMENTO RÁPIDO'
+                : 'FAST TRACKING'}
             </Typography>
             <Typography variant="headlineSm" style={styles.consoleTitle}>
               {isPt ? 'Consumo de Água Pura' : 'Pure Water Intake'}
@@ -168,6 +213,7 @@ export default function AddWaterScreen() {
           isLoading={isLoading}
           isSaved={isSaved}
           isPt={isPt}
+          isEditMode={isEditMode}
         />
       </ScrollView>
     </SafeAreaView>

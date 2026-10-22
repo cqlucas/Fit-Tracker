@@ -11,6 +11,7 @@ export interface SaveWaterButtonProps {
   isLoading?: boolean;
   isSaved?: boolean;
   isPt?: boolean;
+  isEditMode?: boolean;
 }
 
 export function SaveWaterButton({
@@ -19,6 +20,7 @@ export function SaveWaterButton({
   isLoading = false,
   isSaved = false,
   isPt = false,
+  isEditMode = false,
 }: SaveWaterButtonProps) {
   return (
     <View style={styles.container}>
@@ -26,7 +28,15 @@ export function SaveWaterButton({
         onPress={onPress}
         disabled={isLoading || isSaved}
         accessibilityRole="button"
-        accessibilityLabel={isPt ? 'Registrar Água' : 'Save Water'}
+        accessibilityLabel={
+          isEditMode
+            ? isPt
+              ? 'Salvar Alterações'
+              : 'Save Changes'
+            : isPt
+            ? 'Registrar Água'
+            : 'Save Water'
+        }
         style={({ pressed }) => [
           styles.button,
           isSaved ? styles.buttonSaved : styles.buttonNormal,
@@ -39,14 +49,26 @@ export function SaveWaterButton({
           <>
             <CheckCircle2 size={24} color={colors.onPrimary} strokeWidth={2.8} />
             <Typography variant="headlineSm" style={styles.textSaved}>
-              {isPt ? `+${amount}ml Registrado!` : `Logged +${amount}ml!`}
+              {isEditMode
+                ? isPt
+                  ? 'Alterações Salvas!'
+                  : 'Changes Saved!'
+                : isPt
+                ? `+${amount}ml Registrado!`
+                : `Logged +${amount}ml!`}
             </Typography>
           </>
         ) : (
           <>
             <CheckCircle2 size={24} color={colors.onSecondary} strokeWidth={2.6} />
             <Typography variant="headlineSm" style={styles.textNormal}>
-              {isPt ? 'Registrar Água' : 'Save Water'}
+              {isEditMode
+                ? isPt
+                  ? 'Salvar Alterações'
+                  : 'Save Changes'
+                : isPt
+                ? 'Registrar Água'
+                : 'Save Water'}
             </Typography>
           </>
         )}

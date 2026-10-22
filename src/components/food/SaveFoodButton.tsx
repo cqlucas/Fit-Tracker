@@ -10,6 +10,7 @@ export interface SaveFoodButtonProps {
   isLoading?: boolean;
   isSaved?: boolean;
   isPt?: boolean;
+  isEditMode?: boolean;
 }
 
 export function SaveFoodButton({
@@ -17,6 +18,7 @@ export function SaveFoodButton({
   isLoading = false,
   isSaved = false,
   isPt = false,
+  isEditMode = false,
 }: SaveFoodButtonProps) {
   return (
     <View style={styles.container}>
@@ -24,7 +26,15 @@ export function SaveFoodButton({
         onPress={onPress}
         disabled={isLoading || isSaved}
         accessibilityRole="button"
-        accessibilityLabel={isPt ? 'Registrar Refeição' : 'Log Meal to Daily Rings'}
+        accessibilityLabel={
+          isEditMode
+            ? isPt
+              ? 'Salvar Alterações'
+              : 'Save Changes'
+            : isPt
+            ? 'Registrar Refeição'
+            : 'Log Meal to Daily Rings'
+        }
         style={({ pressed }) => [
           styles.button,
           isSaved ? styles.buttonSaved : styles.buttonNormal,
@@ -37,14 +47,26 @@ export function SaveFoodButton({
           <>
             <CheckCircle2 size={24} color={colors.onPrimary} strokeWidth={2.8} />
             <Typography variant="headlineSm" style={styles.textSaved}>
-              {isPt ? 'Refeição Registrada!' : 'Meal Logged Successfully!'}
+              {isEditMode
+                ? isPt
+                  ? 'Alterações Salvas!'
+                  : 'Changes Saved!'
+                : isPt
+                ? 'Refeição Registrada!'
+                : 'Meal Logged Successfully!'}
             </Typography>
           </>
         ) : (
           <>
             <Utensils size={22} color={colors.onPrimaryFixed} strokeWidth={2.4} />
             <Typography variant="headlineSm" style={styles.textNormal}>
-              {isPt ? 'Registrar Refeição nas Metas' : 'Log Meal to Daily Rings'}
+              {isEditMode
+                ? isPt
+                  ? 'Salvar Alterações'
+                  : 'Save Changes'
+                : isPt
+                ? 'Registrar Refeição nas Metas'
+                : 'Log Meal to Daily Rings'}
             </Typography>
           </>
         )}
