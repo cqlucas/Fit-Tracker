@@ -1,24 +1,41 @@
-import { Flame, Lock } from 'lucide-react-native';
-import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Flame, Info } from 'lucide-react-native';
+import React, { useMemo } from 'react';
+import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 
-import { Badge } from '@/components/ui/Badge';
 import { Card } from '@/components/ui/Card';
 import { Typography } from '@/components/ui/Typography';
 import { colors, radii, spacing } from '@/theme/tokens';
 
 export interface CalorieGoalCardProps {
-  currentGoal?: number;
+  value: string;
+  onChangeValue: (val: string) => void;
   isPt?: boolean;
 }
 
-export function CalorieGoalCard({ currentGoal = 2200, isPt = false }: CalorieGoalCardProps) {
+export function CalorieGoalCard({
+  value,
+  onChangeValue,
+  isPt = false,
+}: CalorieGoalCardProps) {
+  const numericValue = parseInt(value, 10) || 0;
+
+  // Classificação dinâmica do modo metabólico com base no valor inserido
+  const modeLabel = useMemo(() => {
+    if (numericValue === 0) return isPt ? 'Indefinido' : 'Undefined';
+    if (numericValue < 2000) return isPt ? 'Déficit' : 'Deficit';
+    if (numericValue <= 2400) return isPt ? 'Manutenção' : 'Maintenance';
+    return isPt ? 'Superávit' : 'Surplus';
+  }, [numericValue, isPt]);
+
+  // Presets rápidos para seleção imediata
+  const quickPresets = [1800, 2000, 2200, 2500];
+
   return (
-    <Card variant="low" style={styles.card}>
-      {/* Glow sutil */}
+    <Card variant="low" glow="tertiary" style={styles.card}>
+      {/* Glow de fundo */}
       <View style={styles.ambientGlow} />
 
-      {/* Header Row com Badge "Em Breve" */}
+      {/* Header Row */}
       <View style={styles.header}>
         <View style={styles.headerTitleGroup}>
           <View style={styles.iconBox}>
@@ -33,20 +50,24 @@ export function CalorieGoalCard({ currentGoal = 2200, isPt = false }: CalorieGoa
             </Typography>
           </View>
         </View>
-
-        <Badge
-          label={isPt ? 'Em breve' : 'Coming soon'}
-          variant="subtle"
-          style={styles.comingSoonBadge}
-        />
+        <Flame size={18} color={colors.tertiaryContainer} style={styles.headerRightIcon} />
       </View>
 
-      {/* Readout Box (Desabilitado) */}
+      {/* Value Readout Box - Campo de input numérico livre */}
       <View style={styles.readoutBox}>
         <View style={styles.inputRow}>
-          <Typography variant="displayHeroMobile" color={colors.tertiary} style={styles.valueText}>
-            {currentGoal.toLocaleString()}
-          </Typography>
+          <TextInput
+            value={value}
+            onChangeText={(text) => {
+              const cleaned = text.replace(/[^0-9]/g, '');
+              onChangeValue(cleaned);
+            }}
+            keyboardType="numeric"
+            maxLength={5}
+            placeholder="2200"
+            placeholderTextColor={`${colors.tertiaryContainer}50`}
+            style={styles.numericInput}
+          />
           <Typography variant="labelMd" color={colors.onSurfaceVariant} style={styles.unitText}>
             {isPt ? 'KCAL / DIA' : 'KCAL / DAY'}
           </Typography>
@@ -54,40 +75,47 @@ export function CalorieGoalCard({ currentGoal = 2200, isPt = false }: CalorieGoa
 
         <View style={styles.statusColumn}>
           <Typography variant="unitCaption" color={colors.outline} style={styles.statusLabel}>
-            {isPt ? 'MODO BASE' : 'CURRENT MODE'}
+            {isPt ? 'MODO ESTIMADO' : 'CALCULATED MODE'}
           </Typography>
           <Typography variant="metricNumeralSm" color={colors.tertiary} style={styles.statusValue}>
-            {isPt ? 'Manutenção' : 'Maintenance'}
+            {modeLabel}
           </Typography>
         </View>
       </View>
 
-      {/* Segmented Badges Desabilitados */}
-      <View style={styles.segmentedContainer}>
-        <View style={styles.segment}>
-          <Typography variant="labelSm" color={colors.outline}>
-            {isPt ? 'Déficit (-400)' : 'Deficit'}
-          </Typography>
-        </View>
-        <View style={[styles.segment, styles.segmentActive]}>
-          <Typography variant="labelSm" color={colors.onTertiary} style={styles.segmentTextActive}>
-            {isPt ? 'Manutenção' : 'Maintenance'}
-          </Typography>
-        </View>
-        <View style={styles.segment}>
-          <Typography variant="labelSm" color={colors.outline}>
-            {isPt ? 'Superávit (+400)' : 'Surplus'}
-          </Typography>
-        </View>
+      {/* Quick Preset Chips */}
+      <View style={styles.presetsRow}>
+        {quickPresets.map((preset) => {
+          const isSelected = numericValue === preset;
+          return (
+            <Pressable
+              key={preset}
+              onPress={() => onChangeValue(String(preset))}
+              accessibilityRole="button"
+              accessibilityLabel={`${preset} kcal`}
+              style={({ pressed }) => [
+                styles.chip,
+                isSelected && styles.chipActive,
+                pressed && styles.chipPressed,
+              ]}>
+              <Typography
+                variant="labelSm"
+                color={isSelected ? colors.onTertiary : colors.onSurfaceVariant}
+                style={isSelected ? styles.chipTextActive : undefined}>
+                {preset} kcal
+              </Typography>
+            </Pressable>
+          );
+        })}
       </View>
 
-      {/* Micro-Copy Explicativo de Planejamento Futuro */}
+      {/* Micro-Copy Informativo */}
       <View style={styles.tipRow}>
-        <Lock size={14} color={colors.outline} style={styles.tipIcon} />
-        <Typography variant="bodyMd" color={colors.outline} style={styles.tipText}>
+        <Info size={15} color={colors.tertiaryContainer} style={styles.tipIcon} />
+        <Typography variant="bodyMd" color={colors.onSurfaceVariant} style={styles.tipText}>
           {isPt
-            ? 'O motor de periodização calórica inteligente está em desenvolvimento e será liberado na próxima versão.'
-            : 'Dynamic caloric budget and smart periodization will be enabled in the upcoming release.'}
+            ? 'Calcula automaticamente o balanço e déficit calórico diário no painel de controle e na evolução semanal.'
+            : 'Automatically calculates daily energy balance and calorie deficits across the dashboard and analytics.'}
         </Typography>
       </View>
     </Card>
@@ -99,9 +127,6 @@ const styles = StyleSheet.create({
     padding: spacing.md + 2,
     position: 'relative',
     overflow: 'hidden',
-    opacity: 0.62, // Opacidade reduzida para indicar recurso bloqueado / futuro
-    borderWidth: 1,
-    borderColor: `${colors.strokeSubtle}90`,
   },
   ambientGlow: {
     position: 'absolute',
@@ -110,7 +135,7 @@ const styles = StyleSheet.create({
     width: 140,
     height: 140,
     borderRadius: radii.full,
-    backgroundColor: `${colors.tertiaryContainer}06`,
+    backgroundColor: `${colors.tertiaryContainer}08`,
   },
   header: {
     flexDirection: 'row',
@@ -137,19 +162,17 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontWeight: '700',
   },
-  comingSoonBadge: {
-    borderColor: `${colors.tertiaryContainer}60`,
-    backgroundColor: `${colors.tertiaryContainer}15`,
+  headerRightIcon: {
+    opacity: 0.8,
   },
   readoutBox: {
     backgroundColor: colors.surfaceContainer,
     borderRadius: radii.lg,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm + 2,
+    padding: spacing.md,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: spacing.sm,
+    marginBottom: spacing.md,
     borderWidth: 1,
     borderColor: colors.strokeSubtle,
   },
@@ -157,17 +180,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'baseline',
     gap: spacing.xs + 2,
+    flex: 1,
   },
-  valueText: {
-    fontSize: 34,
+  numericInput: {
+    fontSize: 40,
     fontWeight: '800',
-    lineHeight: 38,
+    color: colors.tertiary,
+    padding: 0,
+    margin: 0,
+    minWidth: 100,
   },
   unitText: {
-    letterSpacing: 0.8,
+    letterSpacing: 0.6,
   },
   statusColumn: {
     alignItems: 'flex-end',
+    gap: 2,
   },
   statusLabel: {
     letterSpacing: 0.6,
@@ -175,40 +203,46 @@ const styles = StyleSheet.create({
   statusValue: {
     fontWeight: '700',
   },
-  segmentedContainer: {
+  presetsRow: {
     flexDirection: 'row',
+    gap: spacing.xs + 2,
+    marginBottom: spacing.md,
+  },
+  chip: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: radii.md,
     backgroundColor: colors.surfaceContainer,
-    borderRadius: radii.lg,
-    padding: 3,
-    marginBottom: spacing.sm,
     borderWidth: 1,
     borderColor: colors.strokeSubtle,
-  },
-  segment: {
-    flex: 1,
-    paddingVertical: 7,
-    borderRadius: radii.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  segmentActive: {
+  chipActive: {
     backgroundColor: colors.tertiaryContainer,
+    borderColor: colors.tertiary,
   },
-  segmentTextActive: {
+  chipPressed: {
+    opacity: 0.7,
+  },
+  chipTextActive: {
     fontWeight: '700',
   },
   tipRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: spacing.xs + 3,
-    paddingTop: 4,
+    gap: spacing.sm,
+    backgroundColor: `${colors.surfaceContainer}70`,
+    borderRadius: radii.md,
+    padding: spacing.sm + 2,
   },
   tipIcon: {
     marginTop: 2,
+    flexShrink: 0,
   },
   tipText: {
+    flex: 1,
     fontSize: 12,
     lineHeight: 17,
-    flex: 1,
   },
 });

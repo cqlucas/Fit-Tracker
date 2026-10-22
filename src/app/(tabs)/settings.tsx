@@ -29,6 +29,7 @@ export default function SettingsScreen() {
   // Estados locais do formulário de metas
   const [proteinInput, setProteinInput] = useState('160');
   const [waterInput, setWaterInput] = useState('3000');
+  const [caloriesInput, setCaloriesInput] = useState('2200');
   const [language, setLanguage] = useState<'pt' | 'en'>(currentGlobalLang);
 
   const [isSaving, setIsSaving] = useState(false);
@@ -46,6 +47,7 @@ export default function SettingsScreen() {
           if (isMounted) {
             setProteinInput(String(current.proteinGoal));
             setWaterInput(String(current.waterGoal));
+            setCaloriesInput(String(current.caloriesGoal));
             const lang = current.language ?? 'pt';
             setLanguage(lang);
             void setGlobalLanguage(lang);
@@ -71,6 +73,7 @@ export default function SettingsScreen() {
   const handleReset = () => {
     setProteinInput(String(DEFAULT_GOALS.proteinGoal));
     setWaterInput(String(DEFAULT_GOALS.waterGoal));
+    setCaloriesInput(String(DEFAULT_GOALS.caloriesGoal));
     setLanguage(DEFAULT_GOALS.language);
     void setGlobalLanguage(DEFAULT_GOALS.language);
   };
@@ -79,6 +82,7 @@ export default function SettingsScreen() {
   const handleSave = async () => {
     const proteinNum = parseInt(proteinInput, 10);
     const waterNum = parseInt(waterInput, 10);
+    const caloriesNum = parseInt(caloriesInput, 10);
 
     if (isNaN(proteinNum) || proteinNum <= 0) {
       Alert.alert(t.settings.invalidTitle, t.settings.invalidProtein);
@@ -90,11 +94,17 @@ export default function SettingsScreen() {
       return;
     }
 
+    if (isNaN(caloriesNum) || caloriesNum <= 0) {
+      Alert.alert(t.settings.invalidTitle, t.settings.invalidCalories);
+      return;
+    }
+
     setIsSaving(true);
     try {
       await goalsRepository.update({
         proteinGoal: proteinNum,
         waterGoal: waterNum,
+        caloriesGoal: caloriesNum,
         language,
       });
 
@@ -153,8 +163,12 @@ export default function SettingsScreen() {
             isPt={isPt}
           />
 
-          {/* 3. Meta Calórica: Recurso futuro bloqueado com badge "Em breve" */}
-          <CalorieGoalCard currentGoal={2200} isPt={isPt} />
+          {/* 3. Meta Calórica: 100% customizável em kcal */}
+          <CalorieGoalCard
+            value={caloriesInput}
+            onChangeValue={setCaloriesInput}
+            isPt={isPt}
+          />
 
           {/* 4. Seletor de Idioma: Alternar entre PT-BR e EN */}
           <LanguageSelectorCard

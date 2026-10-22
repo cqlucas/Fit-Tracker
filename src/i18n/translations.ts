@@ -73,6 +73,7 @@ export interface TranslationSchema {
     saveFooter: string;
     invalidProtein: string;
     invalidWater: string;
+    invalidCalories: string;
     invalidTitle: string;
     errorTitle: string;
     errorMessage: string;
@@ -230,6 +231,7 @@ export const translations: Record<AppLanguage, TranslationSchema> = {
       saveFooter: 'As alterações recalculam instantaneamente os gráficos de rosca e o progresso.',
       invalidProtein: 'Por favor, insira uma meta válida de proteína (maior que 0g).',
       invalidWater: 'Por favor, insira uma meta válida de água (maior que 0ml).',
+      invalidCalories: 'Por favor, insira uma meta válida de calorias (maior que 0 kcal).',
       invalidTitle: 'Valor Inválido',
       errorTitle: 'Erro ao Salvar',
       errorMessage: 'Não foi possível persistir as metas no banco local.',
@@ -385,6 +387,7 @@ export const translations: Record<AppLanguage, TranslationSchema> = {
       saveFooter: 'Changes reflect instantly across widgets, companions, and ring charts.',
       invalidProtein: 'Please enter a valid protein target (greater than 0g).',
       invalidWater: 'Please enter a valid water target (greater than 0ml).',
+      invalidCalories: 'Please enter a valid calorie target (greater than 0 kcal).',
       invalidTitle: 'Invalid Value',
       errorTitle: 'Error Saving',
       errorMessage: 'Could not persist goals to local database.',
