@@ -1,13 +1,13 @@
 import { router } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
+  Alert,
   ScrollView,
   StyleSheet,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { BeverageType, BeverageTypeSelector } from '@/components/water/BeverageTypeSelector';
 import { HydrationImpactBar } from '@/components/water/HydrationImpactBar';
 import { QuickWaterPresets } from '@/components/water/QuickWaterPresets';
 import { SaveWaterButton } from '@/components/water/SaveWaterButton';
@@ -16,20 +16,44 @@ import { WaterHeader } from '@/components/water/WaterHeader';
 import { WaterVesselVisual } from '@/components/water/WaterVesselVisual';
 import { Typography } from '@/components/ui/Typography';
 import { useLanguage } from '@/context/LanguageContext';
+import { goalsRepository } from '@/repositories/goals.repository';
+import { logsRepository } from '@/repositories/logs.repository';
 import { colors, radii, shadows, spacing } from '@/theme/tokens';
+import { toDateKey } from '@/utils/date';
 
 export default function AddWaterScreen() {
   const { isPt } = useLanguage();
 
   // Estados locais do formulário de água
-  const [beverage, setBeverage] = useState<BeverageType>('water');
   const [intakeVolume, setIntakeVolume] = useState(500);
+  const [baseTodayConsumed, setBaseTodayConsumed] = useState(0);
+  const [dailyWaterGoal, setDailyWaterGoal] = useState(3000);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
 
-  // Valores base de exemplo para a prévia de impacto (conectaremos ao SQLite na próxima etapa)
-  const baseTodayConsumed = 2250;
-  const dailyWaterGoal = 3000;
+  // Carrega consumo real do dia e meta para o cálculo de telemetria
+  useEffect(() => {
+    let isMounted = true;
+    async function loadHydrationTelemetry() {
+      try {
+        const today = toDateKey();
+        const [summary, goals] = await Promise.all([
+          logsRepository.getDailySummary(today),
+          goalsRepository.getGoals(),
+        ]);
+        if (isMounted) {
+          setBaseTodayConsumed(summary.water.consumed);
+          setDailyWaterGoal(goals.waterGoal);
+        }
+      } catch (err) {
+        console.warn('[AddWater] Erro ao carregar dados de telemetria:', err);
+      }
+    }
+    loadHydrationTelemetry();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleIncrement = () => {
     setIntakeVolume((prev) => Math.min(prev + 50, 2500));
@@ -39,23 +63,46 @@ export default function AddWaterScreen() {
     setIntakeVolume((prev) => Math.max(prev - 50, 50));
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (isLoading || isSaved) return;
+
+    if (!intakeVolume || intakeVolume <= 0 || !Number.isInteger(intakeVolume)) {
+      Alert.alert(
+        isPt ? 'Quantidade Inválida' : 'Invalid Amount',
+        isPt
+          ? 'Por favor, selecione uma quantidade de água maior que zero.'
+          : 'Please select an amount of water greater than zero.'
+      );
+      return;
+    }
+
     setIsLoading(true);
 
-    // Simulação visual de salvamento e feedback de celebração
-    setTimeout(() => {
-      setIsLoading(false);
+    try {
+      await logsRepository.addWater({
+        amountMl: intakeVolume,
+        dateKey: toDateKey(),
+      });
+
       setIsSaved(true);
 
       setTimeout(() => {
-        setIsSaved(false);
         if (router.canGoBack()) {
           router.back();
         } else {
-          router.push('/(tabs)');
+          router.replace('/(tabs)');
         }
-      }, 1500);
-    }, 450);
+      }, 700);
+    } catch (err: any) {
+      console.error('[AddWater] Falha ao salvar registro de água:', err);
+      Alert.alert(
+        isPt ? 'Erro ao Registrar' : 'Failed to Save',
+        isPt
+          ? 'Ocorreu um erro ao registrar a água no banco de dados local.'
+          : 'An error occurred while saving the water intake to local database.'
+      );
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -83,16 +130,9 @@ export default function AddWaterScreen() {
               {isPt ? 'RASTREAMENTO RÁPIDO' : 'FAST TRACKING'}
             </Typography>
             <Typography variant="headlineSm" style={styles.consoleTitle}>
-              {isPt ? 'Consumo de Líquidos' : 'Quick Intake Log'}
+              {isPt ? 'Consumo de Água Pura' : 'Pure Water Intake'}
             </Typography>
           </View>
-
-          {/* Seletor de Tipo de Bebida */}
-          <BeverageTypeSelector
-            selected={beverage}
-            onSelect={setBeverage}
-            isPt={isPt}
-          />
 
           {/* Garrafa / Vaso com nível de líquido animado em SVG */}
           <WaterVesselVisual volume={intakeVolume} isPt={isPt} />
@@ -150,46 +190,47 @@ const styles = StyleSheet.create({
   },
   consoleCard: {
     width: '100%',
-    backgroundColor: colors.surfaceContainer,
+    backgroundColor: colors.surfaceLow,
     borderRadius: radii['2xl'],
-    padding: spacing.md + 2,
-    alignItems: 'center',
-    gap: spacing.sm + 2,
+    padding: spacing.md,
     position: 'relative',
     overflow: 'hidden',
+    alignItems: 'center',
     borderWidth: 1,
-    borderColor: colors.strokeSubtle,
+    borderColor: colors.strokeCrisp,
     ...shadows.card,
   },
   ambientGlow: {
     position: 'absolute',
-    top: -40,
-    right: -40,
-    width: 180,
-    height: 180,
+    top: -48,
+    right: -48,
+    width: 192,
+    height: 192,
     borderRadius: radii.full,
-    backgroundColor: `${colors.secondary}12`,
+    backgroundColor: 'rgba(76, 215, 246, 0.08)',
   },
   handleRow: {
+    width: '100%',
     alignItems: 'center',
-    paddingVertical: 2,
+    paddingBottom: spacing.xs,
+    paddingTop: 4,
   },
   handle: {
-    width: 38,
-    height: 4,
+    width: 40,
+    height: 5,
     borderRadius: radii.full,
     backgroundColor: colors.surfaceHighest,
   },
   subHeader: {
-    alignItems: 'center',
-    gap: 2,
+    width: '100%',
+    marginBottom: spacing.md,
   },
   tagline: {
-    letterSpacing: 1,
+    letterSpacing: 1.2,
     fontWeight: '800',
+    marginBottom: 2,
   },
   consoleTitle: {
     fontWeight: '800',
-    lineHeight: 26,
   },
 });

@@ -290,7 +290,9 @@ async function getWeeklyConsistency(endDateKey?: string, days = 7): Promise<Week
 
 export const logsRepository = {
   addWater,
+  addWaterLog: addWater,
   addFood,
+  addFoodLog: addFood,
   removeWater,
   removeFood,
   waterLogsByDateQuery,

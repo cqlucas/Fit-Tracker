@@ -69,4 +69,10 @@ async function update(input: UpdateGoalsInput): Promise<UserGoals> {
   return row;
 }
 
-export const goalsRepository = { liveQuery, get, update };
+export const goalsRepository = {
+  liveQuery,
+  get,
+  getGoals: get,
+  update,
+  updateGoals: update,
+};
