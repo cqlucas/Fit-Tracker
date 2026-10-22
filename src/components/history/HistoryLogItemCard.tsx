@@ -1,0 +1,300 @@
+import {
+  Camera,
+  Droplets,
+  Trash2,
+  Utensils,
+} from 'lucide-react-native';
+import React from 'react';
+import {
+  Alert,
+  Pressable,
+  StyleSheet,
+  View,
+} from 'react-native';
+
+import { Typography } from '@/components/ui/Typography';
+import { useLanguage } from '@/context/LanguageContext';
+import { MealWindow } from '@/db/schema';
+import { UnifiedLogItem } from '@/repositories/logs.repository';
+import { colors, radii, shadows, spacing } from '@/theme/tokens';
+
+export interface HistoryLogItemCardProps {
+  item: UnifiedLogItem;
+  onDelete: (id: string, type: 'water' | 'food') => void;
+}
+
+export function HistoryLogItemCard({ item, onDelete }: HistoryLogItemCardProps) {
+  const { t, isPt } = useLanguage();
+
+  const formatTime = (isoString: string): string => {
+    try {
+      const d = new Date(isoString);
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return '';
+    }
+  };
+
+  const getMealWindowLabel = (window: MealWindow): string => {
+    switch (window) {
+      case 'breakfast':
+        return t.history.breakfast;
+      case 'lunch':
+        return t.history.lunch;
+      case 'dinner':
+        return t.history.dinner;
+      case 'snack':
+        return t.history.snack;
+      default:
+        return window;
+    }
+  };
+
+  const handleDeletePress = () => {
+    Alert.alert(
+      t.history.deleteTitle,
+      t.history.deleteConfirm,
+      [
+        {
+          text: t.history.cancel,
+          style: 'cancel',
+        },
+        {
+          text: t.history.delete,
+          style: 'destructive',
+          onPress: () => onDelete(item.id, item.type),
+        },
+      ]
+    );
+  };
+
+  if (item.type === 'food') {
+    return (
+      <View style={styles.card}>
+        <View style={styles.leftRow}>
+          {/* Ícone de Comida ou Câmera */}
+          <View style={[styles.iconBox, styles.foodIconBox]}>
+            {item.entryMethod === 'image' ? (
+              <Camera size={18} color={colors.primary} />
+            ) : (
+              <Utensils size={18} color={colors.primary} />
+            )}
+          </View>
+
+          {/* Dados Textuais */}
+          <View style={styles.detailsCol}>
+            <Typography variant="labelMd" style={styles.itemTitle} numberOfLines={1}>
+              {item.name}
+            </Typography>
+
+            <View style={styles.metaRow}>
+              {/* Badge da Janela de Refeição */}
+              <View style={styles.mealBadge}>
+                <Typography variant="unitCaption" color={colors.primary} style={styles.badgeText}>
+                  {getMealWindowLabel(item.mealWindow).toUpperCase()}
+                </Typography>
+              </View>
+
+              <Typography variant="unitCaption" color={colors.onSurfaceVariant}>
+                {formatTime(item.createdAt)}
+              </Typography>
+            </View>
+          </View>
+        </View>
+
+        {/* Lado Direito: Macros e Excluir */}
+        <View style={styles.rightGroup}>
+          <View style={styles.macrosCol}>
+            <View style={styles.macroPill}>
+              <Typography variant="metricNumeralSm" color={colors.primary} style={styles.macroValue}>
+                {item.proteinG}g
+              </Typography>
+              <Typography variant="unitCaption" color={colors.onSurfaceVariant}>
+                {isPt ? 'prot' : 'pro'}
+              </Typography>
+            </View>
+
+            <View style={styles.macroPill}>
+              <Typography variant="labelSm" color={colors.tertiary} style={styles.calorieValue}>
+                {item.caloriesKcal}
+              </Typography>
+              <Typography variant="unitCaption" color={colors.onSurfaceVariant}>
+                kcal
+              </Typography>
+            </View>
+          </View>
+
+          {/* Botão de Excluir */}
+          <Pressable
+            onPress={handleDeletePress}
+            accessibilityRole="button"
+            accessibilityLabel={t.history.delete}
+            hitSlop={8}
+            style={({ pressed }) => [styles.trashBtn, pressed && styles.pressed]}>
+            <Trash2 size={16} color={colors.error || '#ffb4ab'} />
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
+
+  // Card de Água
+  return (
+    <View style={styles.card}>
+      <View style={styles.leftRow}>
+        {/* Ícone de Água */}
+        <View style={[styles.iconBox, styles.waterIconBox]}>
+          <Droplets size={18} color={colors.secondary} />
+        </View>
+
+        {/* Dados Textuais */}
+        <View style={styles.detailsCol}>
+          <Typography variant="labelMd" style={styles.itemTitle} numberOfLines={1}>
+            {t.history.waterTitle}
+          </Typography>
+
+          <View style={styles.metaRow}>
+            <View style={styles.waterBadge}>
+              <Typography variant="unitCaption" color={colors.secondary} style={styles.badgeText}>
+                H2O
+              </Typography>
+            </View>
+
+            <Typography variant="unitCaption" color={colors.onSurfaceVariant}>
+              {formatTime(item.createdAt)}
+            </Typography>
+          </View>
+        </View>
+      </View>
+
+      {/* Lado Direito: Volume e Excluir */}
+      <View style={styles.rightGroup}>
+        <View style={styles.waterAmountBox}>
+          <Typography variant="metricNumeralSm" color={colors.secondary} style={styles.waterNumber}>
+            +{item.amountMl}
+          </Typography>
+          <Typography variant="unitCaption" color={colors.secondaryFixedDim}>
+            ml
+          </Typography>
+        </View>
+
+        {/* Botão de Excluir */}
+        <Pressable
+          onPress={handleDeletePress}
+          accessibilityRole="button"
+          accessibilityLabel={t.history.delete}
+          hitSlop={8}
+          style={({ pressed }) => [styles.trashBtn, pressed && styles.pressed]}>
+          <Trash2 size={16} color={colors.error || '#ffb4ab'} />
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.surfaceContainer,
+    borderRadius: radii.xl,
+    paddingVertical: 12,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.strokeSubtle,
+    ...shadows.card,
+  },
+  leftRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm + 2,
+    flex: 1,
+    marginRight: spacing.sm,
+  },
+  iconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: radii.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  foodIconBox: {
+    backgroundColor: `${colors.primary}16`,
+    borderWidth: 1,
+    borderColor: `${colors.primary}30`,
+  },
+  waterIconBox: {
+    backgroundColor: `${colors.secondary}16`,
+    borderWidth: 1,
+    borderColor: `${colors.secondary}30`,
+  },
+  detailsCol: {
+    flex: 1,
+    gap: 3,
+  },
+  itemTitle: {
+    fontWeight: '700',
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  mealBadge: {
+    backgroundColor: `${colors.primary}18`,
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: radii.sm,
+  },
+  waterBadge: {
+    backgroundColor: `${colors.secondary}18`,
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: radii.sm,
+  },
+  badgeText: {
+    fontWeight: '800',
+    letterSpacing: 0.4,
+  },
+  rightGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm + 2,
+  },
+  macrosCol: {
+    alignItems: 'flex-end',
+    gap: 1,
+  },
+  macroPill: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 2,
+  },
+  macroValue: {
+    fontWeight: '800',
+  },
+  calorieValue: {
+    fontWeight: '700',
+  },
+  waterAmountBox: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+  },
+  waterNumber: {
+    fontWeight: '800',
+  },
+  trashBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: radii.full,
+    backgroundColor: colors.surfaceHigh,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pressed: {
+    opacity: 0.65,
+    transform: [{ scale: 0.92 }],
+  },
+});

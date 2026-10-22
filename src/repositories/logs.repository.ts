@@ -35,6 +35,34 @@ export interface AddFoodInput {
   dateKey?: string;
 }
 
+export interface HistoryFilters {
+  type?: 'all' | 'water' | 'food';
+  searchQuery?: string;
+  dateKey?: string | null;
+}
+
+export type UnifiedLogItem =
+  | {
+      id: string;
+      type: 'food';
+      name: string;
+      proteinG: number;
+      caloriesKcal: number;
+      entryMethod: EntryMethod;
+      mealWindow: MealWindow;
+      dateKey: string;
+      createdAt: string;
+      updatedAt: string;
+    }
+  | {
+      id: string;
+      type: 'water';
+      amountMl: number;
+      dateKey: string;
+      createdAt: string;
+      updatedAt: string;
+    };
+
 export interface MacroProgress {
   consumed: number;
   goal: number;
@@ -166,6 +194,14 @@ async function removeFood(id: string): Promise<void> {
     .where(and(eq(foodLogs.id, id), notDeletedFood));
 }
 
+async function deleteLog(id: string, type: 'water' | 'food'): Promise<void> {
+  if (type === 'water') {
+    await removeWater(id);
+  } else {
+    await removeFood(id);
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Leitura — queries "live" (use com useLiveQuery nas telas)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -288,6 +324,76 @@ async function getWeeklyConsistency(endDateKey?: string, days = 7): Promise<Week
   };
 }
 
+/**
+ * Consulta unificada para a tela de Histórico com suporte a filtros
+ * de tipo ('all' | 'water' | 'food'), busca textual e data específica.
+ */
+async function getLogsHistory(filters: HistoryFilters = {}): Promise<UnifiedLogItem[]> {
+  const { type = 'all', searchQuery = '', dateKey = null } = filters;
+  const q = searchQuery.trim().toLowerCase();
+
+  const fetchFood = type === 'all' || type === 'food';
+  const fetchWater =
+    (type === 'all' || type === 'water') &&
+    (!q || q.includes('água') || q.includes('agua') || q.includes('water'));
+
+  const foodConditions = [notDeletedFood];
+  if (dateKey) {
+    foodConditions.push(eq(foodLogs.dateKey, dateKey));
+  }
+  if (q) {
+    foodConditions.push(sql`lower(${foodLogs.name}) LIKE ${`%${q}%`}`);
+  }
+
+  const waterConditions = [notDeletedWater];
+  if (dateKey) {
+    waterConditions.push(eq(waterLogs.dateKey, dateKey));
+  }
+
+  const [foodRows, waterRows] = await Promise.all([
+    fetchFood
+      ? db
+          .select()
+          .from(foodLogs)
+          .where(and(...foodConditions))
+          .orderBy(desc(foodLogs.createdAt))
+      : Promise.resolve([]),
+    fetchWater
+      ? db
+          .select()
+          .from(waterLogs)
+          .where(and(...waterConditions))
+          .orderBy(desc(waterLogs.createdAt))
+      : Promise.resolve([]),
+  ]);
+
+  const unified: UnifiedLogItem[] = [
+    ...foodRows.map((f) => ({
+      id: f.id,
+      type: 'food' as const,
+      name: f.name,
+      proteinG: f.proteinG,
+      caloriesKcal: f.caloriesKcal,
+      entryMethod: f.entryMethod,
+      mealWindow: f.mealWindow,
+      dateKey: f.dateKey,
+      createdAt: f.createdAt,
+      updatedAt: f.updatedAt,
+    })),
+    ...waterRows.map((w) => ({
+      id: w.id,
+      type: 'water' as const,
+      amountMl: w.amountMl,
+      dateKey: w.dateKey,
+      createdAt: w.createdAt,
+      updatedAt: w.updatedAt,
+    })),
+  ];
+
+  unified.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return unified;
+}
+
 export const logsRepository = {
   addWater,
   addWaterLog: addWater,
@@ -295,8 +401,11 @@ export const logsRepository = {
   addFoodLog: addFood,
   removeWater,
   removeFood,
+  deleteLog,
+  getLogsHistory,
   waterLogsByDateQuery,
   foodLogsByDateQuery,
   getDailySummary,
   getWeeklyConsistency,
 };
+

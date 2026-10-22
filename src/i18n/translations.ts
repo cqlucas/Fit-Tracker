@@ -77,6 +77,32 @@ export interface TranslationSchema {
     errorTitle: string;
     errorMessage: string;
   };
+  history: {
+    headerTitle: string;
+    headerSubtitle: string;
+    searchPlaceholder: string;
+    allTypes: string;
+    foodOnly: string;
+    waterOnly: string;
+    allDates: string;
+    today: string;
+    yesterday: string;
+    waterTitle: string;
+    proteinLabel: string;
+    caloriesLabel: string;
+    deleteTitle: string;
+    deleteConfirm: string;
+    cancel: string;
+    delete: string;
+    emptyTitle: string;
+    emptySubtitle: string;
+    clearFilters: string;
+    breakfast: string;
+    lunch: string;
+    dinner: string;
+    snack: string;
+    totalEntries: (count: number) => string;
+  };
 }
 
 export const translations: Record<AppLanguage, TranslationSchema> = {
@@ -161,6 +187,32 @@ export const translations: Record<AppLanguage, TranslationSchema> = {
       errorTitle: 'Erro ao Salvar',
       errorMessage: 'Não foi possível persistir as metas no banco local.',
     },
+    history: {
+      headerTitle: 'Histórico & Registros',
+      headerSubtitle: 'TODOS OS DIAS E REFEIÇÕES',
+      searchPlaceholder: 'Buscar por prato, refeição ou alimento...',
+      allTypes: 'Todos',
+      foodOnly: 'Comida',
+      waterOnly: 'Água',
+      allDates: 'Todas as datas',
+      today: 'Hoje',
+      yesterday: 'Ontem',
+      waterTitle: 'Água Pura',
+      proteinLabel: 'Proteína',
+      caloriesLabel: 'Calorias',
+      deleteTitle: 'Excluir registro',
+      deleteConfirm: 'Deseja realmente remover este registro? O histórico e as metas serão recalculados.',
+      cancel: 'Cancelar',
+      delete: 'Excluir',
+      emptyTitle: 'Nenhum registro encontrado',
+      emptySubtitle: 'Tente alterar os filtros de busca ou adicione um novo registro pelo botão +.',
+      clearFilters: 'Limpar filtros',
+      breakfast: 'Café da manhã',
+      lunch: 'Almoço',
+      dinner: 'Jantar',
+      snack: 'Lanche',
+      totalEntries: (count: number) => `${count} registro${count === 1 ? '' : 's'}`,
+    },
   },
   en: {
     tabs: {
@@ -242,6 +294,32 @@ export const translations: Record<AppLanguage, TranslationSchema> = {
       invalidTitle: 'Invalid Value',
       errorTitle: 'Error Saving',
       errorMessage: 'Could not persist goals to local database.',
+    },
+    history: {
+      headerTitle: 'History & Logs',
+      headerSubtitle: 'ALL DAYS & MEALS',
+      searchPlaceholder: 'Search by meal, dish or ingredient...',
+      allTypes: 'All',
+      foodOnly: 'Food',
+      waterOnly: 'Water',
+      allDates: 'All dates',
+      today: 'Today',
+      yesterday: 'Yesterday',
+      waterTitle: 'Pure Water',
+      proteinLabel: 'Protein',
+      caloriesLabel: 'Calories',
+      deleteTitle: 'Delete record',
+      deleteConfirm: 'Are you sure you want to delete this record? Totals will be updated immediately.',
+      cancel: 'Cancel',
+      delete: 'Delete',
+      emptyTitle: 'No logs found',
+      emptySubtitle: 'Try adjusting your search filters or log an entry using the + button.',
+      clearFilters: 'Clear filters',
+      breakfast: 'Breakfast',
+      lunch: 'Lunch',
+      dinner: 'Dinner',
+      snack: 'Snack',
+      totalEntries: (count: number) => `${count} record${count === 1 ? '' : 's'}`,
     },
   },
 };
