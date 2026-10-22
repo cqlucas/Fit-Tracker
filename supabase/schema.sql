@@ -18,6 +18,7 @@ create table if not exists public.user_goals (
   protein_goal      integer not null default 160,
   water_goal        integer not null default 3000,
   calories_goal     integer not null default 2200,
+  language          text not null default 'pt' check (language in ('pt', 'en')),
   updated_at        timestamptz not null default now(),
   server_updated_at timestamptz not null default now()
 );

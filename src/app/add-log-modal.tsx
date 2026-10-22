@@ -20,11 +20,7 @@ export default function AddLogModal() {
   };
 
   const handleNavigate = (path: '/add-water' | '/add-food') => {
-    // Substitui ou fecha o modal antes de navegar para a tela de destino
-    router.back();
-    setTimeout(() => {
-      router.push(path);
-    }, 120);
+    router.replace(path);
   };
 
   return (
