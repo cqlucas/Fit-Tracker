@@ -186,6 +186,7 @@ export function AnalyticsPeriodSelector({
               ]}>
               <Typography
                 variant="labelSm"
+                numberOfLines={1}
                 color={isSelected ? colors.onSurface : colors.onSurfaceVariant}
                 style={[styles.segmentText, isSelected && styles.segmentTextSelected]}>
                 {opt.label}
@@ -204,14 +205,18 @@ export function AnalyticsPeriodSelector({
             pressed && styles.segmentPressed,
           ]}>
           <CalendarIcon
-            size={13}
+            size={12}
             color={isCustomMode || showCustomDrawer ? colors.primary : colors.onSurfaceVariant}
           />
           <Typography
             variant="labelSm"
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.8}
             color={isCustomMode || showCustomDrawer ? colors.onSurface : colors.onSurfaceVariant}
             style={[
               styles.segmentText,
+              styles.customSegmentText,
               (isCustomMode || showCustomDrawer) && styles.segmentTextSelected,
             ]}>
             {t.analytics.periodCustom}
@@ -365,13 +370,18 @@ const styles = StyleSheet.create({
   segment: {
     flex: 1,
     paddingVertical: spacing.sm,
+    paddingHorizontal: 2,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: radii.full,
   },
   customSegment: {
+    flex: 1.7,
     flexDirection: 'row',
-    gap: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    gap: 3,
   },
   segmentSelected: {
     backgroundColor: colors.surfaceHigh,
@@ -389,6 +399,10 @@ const styles = StyleSheet.create({
   segmentText: {
     fontWeight: '600',
     letterSpacing: 0.2,
+  },
+  customSegmentText: {
+    fontSize: 11,
+    letterSpacing: 0,
   },
   segmentTextSelected: {
     fontWeight: '700',

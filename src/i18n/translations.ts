@@ -164,7 +164,10 @@ export const translations: Record<AppLanguage, TranslationSchema> = {
     },
     home: {
       todayBadge: 'HOJE',
-      streakActive: (days: number) => `Janela metabólica ativa • ${days}º dia seguido`,
+      streakActive: (days: number) =>
+        days > 0
+          ? `Metas batidas • ${days} dia${days > 1 ? 's' : ''} seguido${days > 1 ? 's' : ''}`
+          : 'Nenhuma meta batida ainda hoje',
       adjustTarget: 'Ajustar Meta',
       notifications: 'Notificações',
       protein: 'Proteína',
@@ -320,7 +323,10 @@ export const translations: Record<AppLanguage, TranslationSchema> = {
     },
     home: {
       todayBadge: 'TODAY',
-      streakActive: (days: number) => `Metabolic window active • Day ${days} Streak`,
+      streakActive: (days: number) =>
+        days > 0
+          ? `Goals hit • ${days} day${days > 1 ? 's' : ''} streak`
+          : 'No goals reached yet today',
       adjustTarget: 'Adjust Target',
       notifications: 'Notifications',
       protein: 'Protein',

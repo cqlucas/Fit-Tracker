@@ -38,6 +38,7 @@ export default function HomeScreen() {
     recentMeal,
     weeklyAverage,
     formatDaysForMacro,
+    currentStreak,
     refresh,
   } = useDashboardData();
 
@@ -83,7 +84,7 @@ export default function HomeScreen() {
         <HomeHeader
           dateTitle={dateTitle}
           dayOfWeek={dayOfWeek}
-          streakDays={weeklyStats.proteinDaysHit + weeklyStats.waterDaysHit > 0 ? 7 : 1}
+          streakDays={currentStreak}
         />
 
         {/* Hero Section: Dual Macro Donut Rings (Proteína & Água) */}

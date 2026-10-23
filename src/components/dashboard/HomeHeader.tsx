@@ -1,4 +1,4 @@
-import { SlidersHorizontal, Zap } from 'lucide-react-native';
+import { SlidersHorizontal } from 'lucide-react-native';
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 
@@ -17,30 +17,14 @@ export interface HomeHeaderProps {
 export function HomeHeader({
   dateTitle,
   dayOfWeek,
-  streakDays = 1,
+  streakDays = 0,
   onPressTune,
 }: HomeHeaderProps) {
   const { t } = useLanguage();
+  const hasStreak = streakDays > 0;
 
   return (
     <View style={styles.container}>
-      {/* Top Bar: Brand Logo & Title */}
-      <View style={styles.topBar}>
-        <View style={styles.brandRow}>
-          <View style={styles.logoBadge}>
-            <Zap size={18} color={colors.primary} strokeWidth={2.5} />
-          </View>
-          <View>
-            <Typography variant="headlineSm" style={styles.brandTitle}>
-              NutriPulse
-            </Typography>
-            <Typography variant="unitCaption" color={colors.primary} style={styles.brandSubtitle}>
-              {t.home.todayBadge}
-            </Typography>
-          </View>
-        </View>
-      </View>
-
       {/* Date Meta & Streak Sub-Header */}
       <View style={styles.dateRow}>
         <View style={styles.dateMeta}>
@@ -56,8 +40,10 @@ export function HomeHeader({
           </View>
 
           <View style={styles.streakRow}>
-            <View style={styles.pulseDot} />
-            <Typography variant="labelSm" color={colors.primary}>
+            <View style={[styles.pulseDot, !hasStreak && styles.pulseDotInactive]} />
+            <Typography
+              variant="labelSm"
+              color={hasStreak ? colors.primary : colors.onSurfaceVariant}>
               {t.home.streakActive(streakDays)}
             </Typography>
           </View>
@@ -80,40 +66,8 @@ export function HomeHeader({
 const styles = StyleSheet.create({
   container: {
     width: '100%',
-    paddingBottom: spacing.sm,
-    gap: spacing.md,
-  },
-  topBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  brandRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm + 2,
-  },
-  logoBadge: {
-    width: 36,
-    height: 36,
-    borderRadius: radii.md,
-    backgroundColor: `${colors.primary}18`,
-    borderWidth: 1,
-    borderColor: `${colors.primary}35`,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  brandTitle: {
-    fontWeight: '800',
-    lineHeight: 22,
-  },
-  brandSubtitle: {
-    letterSpacing: 0.8,
-  },
-  topActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
+    paddingBottom: spacing.xs,
+    paddingTop: spacing.xs,
   },
   dateRow: {
     flexDirection: 'row',
@@ -151,5 +105,9 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: radii.full,
     backgroundColor: colors.primary,
+  },
+  pulseDotInactive: {
+    backgroundColor: colors.outline,
+    opacity: 0.6,
   },
 });

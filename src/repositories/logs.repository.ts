@@ -524,10 +524,28 @@ async function getLogsHistory(filters: HistoryFilters = {}): Promise<UnifiedLogI
 
 /**
  * Calcula a sequência atual (streak) de dias consecutivos batendo pelo menos uma meta
- * (proteína ou água) até hoje. Se hoje ainda não bateu mas ontem bateu, o streak permanece ativo.
+ * (proteína, água ou calorias) até hoje. Se hoje ainda não bateu mas ontem bateu, o streak permanece ativo.
  */
-async function calculateCurrentStreak(goals: Goals, todayKey: string): Promise<number> {
-  const checkStart = addDays(todayKey, -60);
+async function calculateCurrentStreak(
+  param1?: string | Goals,
+  param2?: string | Goals,
+): Promise<number> {
+  let currentTodayKey: string;
+  let goalsParam: Goals | undefined;
+
+  if (typeof param1 === 'string') {
+    currentTodayKey = param1;
+    goalsParam = typeof param2 === 'object' ? param2 : undefined;
+  } else if (typeof param1 === 'object') {
+    goalsParam = param1;
+    currentTodayKey = typeof param2 === 'string' ? param2 : toDateKey();
+  } else {
+    currentTodayKey = toDateKey();
+  }
+
+  const currentGoals = goalsParam ?? (await goalsRepository.get());
+  const checkStart = addDays(currentTodayKey, -365);
+
   const [waterRows, foodRows] = await Promise.all([
     db
       .select({
@@ -535,35 +553,41 @@ async function calculateCurrentStreak(goals: Goals, todayKey: string): Promise<n
         totalMl: sql<number>`coalesce(sum(${waterLogs.amountMl}), 0)`,
       })
       .from(waterLogs)
-      .where(and(between(waterLogs.dateKey, checkStart, todayKey), notDeletedWater))
+      .where(and(between(waterLogs.dateKey, checkStart, currentTodayKey), notDeletedWater))
       .groupBy(waterLogs.dateKey),
     db
       .select({
         dateKey: foodLogs.dateKey,
         proteinG: sql<number>`coalesce(sum(${foodLogs.proteinG}), 0)`,
+        caloriesKcal: sql<number>`coalesce(sum(${foodLogs.caloriesKcal}), 0)`,
       })
       .from(foodLogs)
-      .where(and(between(foodLogs.dateKey, checkStart, todayKey), notDeletedFood))
+      .where(and(between(foodLogs.dateKey, checkStart, currentTodayKey), notDeletedFood))
       .groupBy(foodLogs.dateKey),
   ]);
 
   const waterMap = new Map(waterRows.map((r) => [r.dateKey, r.totalMl]));
-  const foodMap = new Map(foodRows.map((r) => [r.dateKey, r.proteinG]));
+  const foodMap = new Map(foodRows.map((r) => [r.dateKey, r]));
 
   const isDayHit = (dk: string) => {
-    const p = foodMap.get(dk) ?? 0;
+    const f = foodMap.get(dk);
+    const p = f?.proteinG ?? 0;
+    const c = f?.caloriesKcal ?? 0;
     const w = waterMap.get(dk) ?? 0;
-    return p >= goals.proteinGoal || w >= goals.waterGoal;
+    const proteinHit = currentGoals.proteinGoal > 0 && p >= currentGoals.proteinGoal;
+    const waterHit = currentGoals.waterGoal > 0 && w >= currentGoals.waterGoal;
+    const caloriesHit = currentGoals.caloriesGoal > 0 && c >= currentGoals.caloriesGoal;
+    return proteinHit || waterHit || caloriesHit;
   };
 
   let streak = 0;
-  let currentKey = todayKey;
+  let currentKey = currentTodayKey;
 
-  if (isDayHit(todayKey)) {
+  if (isDayHit(currentTodayKey)) {
     streak = 1;
-    currentKey = addDays(todayKey, -1);
+    currentKey = addDays(currentTodayKey, -1);
   } else {
-    const yesterday = addDays(todayKey, -1);
+    const yesterday = addDays(currentTodayKey, -1);
     if (isDayHit(yesterday)) {
       streak = 1;
       currentKey = addDays(yesterday, -1);
@@ -769,5 +793,6 @@ export const logsRepository = {
   foodLogsByDateQuery,
   getDailySummary,
   getWeeklyConsistency,
+  calculateCurrentStreak,
 };
 

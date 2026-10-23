@@ -63,17 +63,19 @@ export function useDashboardData() {
   const [weeklyConsistency, setWeeklyConsistency] = useState<WeeklyConsistency | null>(null);
   const [recentMeal, setRecentMeal] = useState<FoodLog | null>(null);
   const [goals, setGoals] = useState<Goals>(DEFAULT_GOALS);
+  const [currentStreak, setCurrentStreak] = useState(0);
 
   const isMountedRef = useRef(true);
   const todayKey = toDateKey();
 
   const fetchData = useCallback(async () => {
     try {
-      const [summary, weekly, currentGoals, latestFoodList] = await Promise.all([
+      const [summary, weekly, currentGoals, latestFoodList, streak] = await Promise.all([
         logsRepository.getDailySummary(todayKey),
         logsRepository.getWeeklyConsistency(todayKey, 7),
         goalsRepository.get(),
         logsRepository.foodLogsByDateQuery(todayKey),
+        logsRepository.calculateCurrentStreak(todayKey),
       ]);
 
       if (isMountedRef.current) {
@@ -81,6 +83,7 @@ export function useDashboardData() {
         setWeeklyConsistency(weekly);
         setGoals(currentGoals);
         setRecentMeal(latestFoodList[0] ?? null);
+        setCurrentStreak(streak);
       }
     } catch (err) {
       if (__DEV__) console.warn('[useDashboardData] Erro ao carregar dados:', err);
@@ -227,6 +230,7 @@ export function useDashboardData() {
     todayKey,
     weeklyAverage,
     formatDaysForMacro,
+    currentStreak,
     refresh: fetchData,
   };
 }
