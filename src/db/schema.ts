@@ -34,12 +34,16 @@ const syncColumns = {
 export const APP_LANGUAGES = ['pt', 'en'] as const;
 export type AppLanguage = (typeof APP_LANGUAGES)[number];
 
+export const AI_PROVIDERS = ['gemini', 'groq'] as const;
+export type PreferredAiProvider = (typeof AI_PROVIDERS)[number];
+
 export const userGoals = sqliteTable('user_goals', {
   id: text('id').primaryKey().default(DEFAULT_USER_ID),
   proteinGoal: integer('protein_goal').notNull().default(160),
   waterGoal: integer('water_goal').notNull().default(3000),
   caloriesGoal: integer('calories_goal').notNull().default(2200),
   language: text('language', { enum: APP_LANGUAGES }).notNull().default('pt'),
+  preferredAiProvider: text('preferred_ai_provider', { enum: AI_PROVIDERS }).notNull().default('gemini'),
   updatedAt: text('updated_at').notNull().default(nowIsoSql),
   isSynced: integer('is_synced', { mode: 'boolean' }).notNull().default(false),
 });

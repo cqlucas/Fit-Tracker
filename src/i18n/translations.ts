@@ -64,6 +64,10 @@ export interface TranslationSchema {
     languageSubtitle: string;
     portuguese: string;
     english: string;
+    aiProviderTitle: string;
+    aiProviderSubtitle: string;
+    aiProviderGemini: string;
+    aiProviderGroq: string;
     remindersTitle: string;
     remindersSubtitle: string;
     syncStatus: string;
@@ -240,6 +244,11 @@ export const translations: Record<AppLanguage, TranslationSchema> = {
       languageSubtitle: 'Interface local e unidades de telemetria',
       portuguese: '🇧🇷 Português (BR)',
       english: '🇺🇸 English (US)',
+      aiProviderTitle: 'Provedor de IA Preferido',
+      aiProviderSubtitle:
+        'Caso o provedor principal falhe ou esteja sobrecarregado, o outro será usado automaticamente como fallback.',
+      aiProviderGemini: 'Google Gemini',
+      aiProviderGroq: 'Groq Cloud',
       remindersTitle: 'Lembretes Inteligentes de Hidratação',
       remindersSubtitle: 'Intervalos dinâmicos sincronizados com o dia',
       syncStatus: 'Status do SQLite Local',
@@ -414,6 +423,11 @@ export const translations: Record<AppLanguage, TranslationSchema> = {
       languageSubtitle: 'Local interface & telemetry units',
       portuguese: '🇧🇷 Português (BR)',
       english: '🇺🇸 English (US)',
+      aiProviderTitle: 'Preferred AI Provider',
+      aiProviderSubtitle:
+        'If the primary provider fails or is overloaded, the other will automatically be used as a fallback.',
+      aiProviderGemini: 'Google Gemini',
+      aiProviderGroq: 'Groq Cloud',
       remindersTitle: 'Smart Hydration Reminders',
       remindersSubtitle: 'Dynamic intervals synced with activity & climate',
       syncStatus: 'Telemetry Sync Status',

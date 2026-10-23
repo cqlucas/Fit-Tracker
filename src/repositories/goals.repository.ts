@@ -6,7 +6,10 @@ import { nowIso } from '@/utils/date';
 
 import { assertPositiveInt } from './validation';
 
-export type Goals = Pick<UserGoals, 'proteinGoal' | 'waterGoal' | 'caloriesGoal' | 'language'>;
+export type Goals = Pick<
+  UserGoals,
+  'proteinGoal' | 'waterGoal' | 'caloriesGoal' | 'language' | 'preferredAiProvider'
+>;
 export type UpdateGoalsInput = Partial<Goals>;
 
 export const DEFAULT_GOALS: Goals = {
@@ -14,6 +17,7 @@ export const DEFAULT_GOALS: Goals = {
   waterGoal: 3000,
   caloriesGoal: 2200,
   language: 'pt',
+  preferredAiProvider: 'gemini',
 };
 
 /**
@@ -32,6 +36,7 @@ async function get(): Promise<Goals> {
     waterGoal: row.waterGoal,
     caloriesGoal: row.caloriesGoal,
     language: row.language ?? 'pt',
+    preferredAiProvider: (row.preferredAiProvider as 'gemini' | 'groq') ?? 'gemini',
   };
 }
 
@@ -54,6 +59,12 @@ async function update(input: UpdateGoalsInput): Promise<UserGoals> {
       throw new Error('Invalid language');
     }
     patch.language = input.language;
+  }
+  if (input.preferredAiProvider !== undefined) {
+    if (input.preferredAiProvider !== 'gemini' && input.preferredAiProvider !== 'groq') {
+      throw new Error('Invalid AI provider');
+    }
+    patch.preferredAiProvider = input.preferredAiProvider;
   }
 
   // Upsert: resiliente caso a linha tenha sido removida por qualquer motivo.

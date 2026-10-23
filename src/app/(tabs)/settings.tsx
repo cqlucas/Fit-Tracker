@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AiProviderSelectorCard } from '@/components/settings/AiProviderSelectorCard';
 import { CalorieGoalCard } from '@/components/settings/CalorieGoalCard';
 import { IntroBanner } from '@/components/settings/IntroBanner';
 import { LanguageSelectorCard } from '@/components/settings/LanguageSelectorCard';
@@ -18,6 +19,7 @@ import { SettingsHeader } from '@/components/settings/SettingsHeader';
 import { StatusSyncCard } from '@/components/settings/StatusSyncCard';
 import { WaterGoalCard } from '@/components/settings/WaterGoalCard';
 import { useLanguage } from '@/context/LanguageContext';
+import { type PreferredAiProvider } from '@/db/schema';
 import { DEFAULT_GOALS, goalsRepository } from '@/repositories/goals.repository';
 import { colors, spacing } from '@/theme/tokens';
 
@@ -31,6 +33,7 @@ export default function SettingsScreen() {
   const [waterInput, setWaterInput] = useState('3000');
   const [caloriesInput, setCaloriesInput] = useState('2200');
   const [language, setLanguage] = useState<'pt' | 'en'>(currentGlobalLang);
+  const [aiProvider, setAiProvider] = useState<PreferredAiProvider>('gemini');
 
   const [isSaving, setIsSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
@@ -50,6 +53,7 @@ export default function SettingsScreen() {
             setCaloriesInput(String(current.caloriesGoal));
             const lang = current.language ?? 'pt';
             setLanguage(lang);
+            setAiProvider(current.preferredAiProvider ?? 'gemini');
             void setGlobalLanguage(lang);
           }
         })
@@ -69,13 +73,21 @@ export default function SettingsScreen() {
     void setGlobalLanguage(newLang);
   };
 
+  // Troca de provedor de IA imediata
+  const handleSelectAiProvider = (newProvider: PreferredAiProvider) => {
+    setAiProvider(newProvider);
+    void goalsRepository.update({ preferredAiProvider: newProvider });
+  };
+
   // Reseta para os valores padrões de fábrica
   const handleReset = () => {
     setProteinInput(String(DEFAULT_GOALS.proteinGoal));
     setWaterInput(String(DEFAULT_GOALS.waterGoal));
     setCaloriesInput(String(DEFAULT_GOALS.caloriesGoal));
     setLanguage(DEFAULT_GOALS.language);
+    setAiProvider(DEFAULT_GOALS.preferredAiProvider ?? 'gemini');
     void setGlobalLanguage(DEFAULT_GOALS.language);
+    void goalsRepository.update({ preferredAiProvider: DEFAULT_GOALS.preferredAiProvider ?? 'gemini' });
   };
 
   // Salva no SQLite com validações estritas
@@ -106,6 +118,7 @@ export default function SettingsScreen() {
         waterGoal: waterNum,
         caloriesGoal: caloriesNum,
         language,
+        preferredAiProvider: aiProvider,
       });
 
       setIsSaved(true);
@@ -174,6 +187,13 @@ export default function SettingsScreen() {
           <LanguageSelectorCard
             language={language}
             onSelectLanguage={handleSelectLanguage}
+          />
+
+          {/* 5. Seletor de Provedor de IA: Alternar entre Gemini e Groq */}
+          <AiProviderSelectorCard
+            provider={aiProvider}
+            onSelectProvider={handleSelectAiProvider}
+            isPt={isPt}
           />
 
           {/* Status de Sincronização Telemetry */}
