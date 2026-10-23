@@ -17,7 +17,7 @@ import { LanguageSelectorCard } from '@/components/settings/LanguageSelectorCard
 import { ProteinGoalCard } from '@/components/settings/ProteinGoalCard';
 import { SaveGoalsButton } from '@/components/settings/SaveGoalsButton';
 import { SettingsHeader } from '@/components/settings/SettingsHeader';
-import { StatusSyncCard } from '@/components/settings/StatusSyncCard';
+import { SupabaseSyncSection } from '@/components/settings/SupabaseSyncSection';
 import { WaterGoalCard } from '@/components/settings/WaterGoalCard';
 import { useLanguage } from '@/context/LanguageContext';
 import { type PreferredAiProvider } from '@/db/schema';
@@ -39,6 +39,7 @@ export default function SettingsScreen() {
   const [apiKeysStatus, setApiKeysStatus] = useState<ApiKeysStatus>({
     hasGeminiKey: false,
     hasGroqKey: false,
+    hasSupabaseLinked: false,
   });
 
   const [isSaving, setIsSaving] = useState(false);
@@ -221,8 +222,22 @@ export default function SettingsScreen() {
             />
           )}
 
-          {/* Status de Sincronização Telemetry */}
-          <StatusSyncCard isPt={isPt} />
+          {/* 7. Nuvem & Sincronização (BYOK Supabase) */}
+          <SupabaseSyncSection
+            isPt={isPt}
+            onSyncCompleted={() => {
+              // Recarrega as metas caso o sync tenha trazido novas metas da nuvem
+              goalsRepository.get().then((current) => {
+                setProteinInput(String(current.proteinGoal));
+                setWaterInput(String(current.waterGoal));
+                setCaloriesInput(String(current.caloriesGoal));
+                const lang = current.language ?? 'pt';
+                setLanguage(lang);
+                setAiProvider(current.preferredAiProvider ?? 'gemini');
+                void setGlobalLanguage(lang);
+              });
+            }}
+          />
 
           {/* Botão de Ação Salvar com feedback reativo */}
           <SaveGoalsButton

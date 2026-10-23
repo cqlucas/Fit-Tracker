@@ -19,6 +19,7 @@ import { WaterVesselVisual } from '@/components/water/WaterVesselVisual';
 import { useLanguage } from '@/context/LanguageContext';
 import { goalsRepository } from '@/repositories/goals.repository';
 import { logsRepository } from '@/repositories/logs.repository';
+import { syncEngine } from '@/sync/sync.service';
 import { colors, radii, shadows, spacing } from '@/theme/tokens';
 import { toDateKey } from '@/utils/date';
 
@@ -133,6 +134,9 @@ export default function AddWaterScreen() {
           ingestedAt: customDateTime,
         });
       }
+
+      // Sincronização em background fire-and-forget
+      syncEngine.requestSync(0);
 
       setIsSaved(true);
 

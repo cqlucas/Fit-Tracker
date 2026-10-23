@@ -72,6 +72,7 @@ export const foodLogs = sqliteTable(
     caloriesKcal: integer('calories_kcal').notNull(),
     entryMethod: text('entry_method', { enum: ENTRY_METHODS }).notNull().default('manual'),
     mealWindow: text('meal_window', { enum: MEAL_WINDOWS }).notNull().default('lunch'),
+    imageUri: text('image_uri'),
     dateKey: text('date_key').notNull(),
     ...syncColumns,
   },

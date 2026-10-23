@@ -58,6 +58,8 @@ const MIGRATIONS: readonly string[] = [
   `ALTER TABLE food_logs ADD COLUMN meal_window TEXT NOT NULL DEFAULT 'lunch';`,
   // v4 — adição de preferred_ai_provider em user_goals
   `ALTER TABLE user_goals ADD COLUMN preferred_ai_provider TEXT NOT NULL DEFAULT 'gemini';`,
+  // v5 — adição de image_uri em food_logs
+  `ALTER TABLE food_logs ADD COLUMN image_uri TEXT;`,
 ];
 
 export const SCHEMA_VERSION = MIGRATIONS.length;

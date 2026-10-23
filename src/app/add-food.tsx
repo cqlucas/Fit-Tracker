@@ -21,6 +21,7 @@ import { useLanguage } from '@/context/LanguageContext';
 import { MealWindow } from '@/db/schema';
 import { logsRepository } from '@/repositories/logs.repository';
 import { analyzeFoodWithAI } from '@/services/gemini.service';
+import { syncEngine } from '@/sync/sync.service';
 import { colors, spacing } from '@/theme/tokens';
 import { toDateKey } from '@/utils/date';
 
@@ -60,6 +61,9 @@ export default function AddFoodScreen() {
           setCaloriesKcal(log.caloriesKcal);
           setMealWindow(log.mealWindow);
           setExistingDateKey(log.dateKey);
+          if (log.imageUri) {
+            setImageUri(log.imageUri);
+          }
           if (log.createdAt) {
             setCustomDateTime(new Date(log.createdAt));
           }
@@ -282,6 +286,7 @@ export default function AddFoodScreen() {
           proteinG,
           caloriesKcal,
           mealWindow,
+          imageUri: imageUri || null,
           entryMethod: imageUri ? 'image' : undefined,
           dateKey: customDateTime ? toDateKey(customDateTime) : existingDateKey,
           ingestedAt: customDateTime,
@@ -293,10 +298,14 @@ export default function AddFoodScreen() {
           caloriesKcal,
           entryMethod: imageUri ? 'image' : 'manual',
           mealWindow,
+          imageUri: imageUri || null,
           dateKey: customDateTime ? toDateKey(customDateTime) : toDateKey(),
           ingestedAt: customDateTime,
         });
       }
+
+      // Sincronização em background fire-and-forget
+      syncEngine.requestSync(0);
 
       setIsSaved(true);
 

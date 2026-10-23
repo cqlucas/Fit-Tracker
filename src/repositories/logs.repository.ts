@@ -40,6 +40,7 @@ export interface AddFoodInput {
   caloriesKcal: number;
   entryMethod?: EntryMethod;
   mealWindow?: MealWindow;
+  imageUri?: string | null;
   dateKey?: string;
   /** Data e horário opcional da ingestão. Se omitido, usa momento atual. */
   ingestedAt?: Date | string | null;
@@ -122,6 +123,7 @@ export type UnifiedLogItem =
       caloriesKcal: number;
       entryMethod: EntryMethod;
       mealWindow: MealWindow;
+      imageUri?: string | null;
       dateKey: string;
       createdAt: string;
       updatedAt: string;
@@ -253,6 +255,7 @@ async function addFood(input: AddFoodInput): Promise<FoodLog> {
       caloriesKcal: Math.round(input.caloriesKcal),
       entryMethod: input.entryMethod ?? 'manual',
       mealWindow: input.mealWindow ?? 'lunch',
+      imageUri: input.imageUri ?? null,
       dateKey,
       createdAt,
       updatedAt: now.toISOString(),
@@ -346,6 +349,7 @@ async function updateFoodLog(id: string, input: UpdateFoodInput): Promise<FoodLo
       caloriesKcal: Math.round(input.caloriesKcal),
       ...(input.mealWindow ? { mealWindow: input.mealWindow } : {}),
       ...(input.entryMethod ? { entryMethod: input.entryMethod } : {}),
+      ...(input.imageUri !== undefined ? { imageUri: input.imageUri } : {}),
       ...(customDate
         ? { createdAt: customDate.toISOString(), dateKey: toDateKey(customDate) }
         : input.dateKey
@@ -534,6 +538,7 @@ async function getLogsHistory(filters: HistoryFilters = {}): Promise<UnifiedLogI
       caloriesKcal: f.caloriesKcal,
       entryMethod: f.entryMethod,
       mealWindow: f.mealWindow,
+      imageUri: f.imageUri ?? null,
       dateKey: f.dateKey,
       createdAt: f.createdAt,
       updatedAt: f.updatedAt,

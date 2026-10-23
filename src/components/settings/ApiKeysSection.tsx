@@ -42,6 +42,7 @@ export function ApiKeysSection({
   const [status, setStatus] = useState<ApiKeysStatus>({
     hasGeminiKey: false,
     hasGroqKey: false,
+    hasSupabaseLinked: false,
   });
   const [isLoading, setIsLoading] = useState(true);
 

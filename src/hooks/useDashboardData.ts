@@ -14,6 +14,7 @@ import {
   type FoodLog,
   type WeeklyConsistency,
 } from '@/repositories/logs.repository';
+import { syncEngine } from '@/sync/sync.service';
 import { fromDateKey, toDateKey } from '@/utils/date';
 
 const DAY_LABELS_EN = ['S', 'M', 'T', 'W', 'T', 'F', 'S']; // Sunday to Saturday
@@ -112,6 +113,7 @@ export function useDashboardData() {
   useFocusEffect(
     useCallback(() => {
       void fetchData();
+      syncEngine.requestSync(0);
     }, [fetchData]),
   );
 

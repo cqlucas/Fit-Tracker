@@ -1,3 +1,4 @@
+import { Image } from 'expo-image';
 import {
   Camera,
   Droplets,
@@ -5,7 +6,7 @@ import {
   Trash2,
   Utensils,
 } from 'lucide-react-native';
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Alert,
   Pressable,
@@ -70,7 +71,11 @@ export function HistoryLogItemCard({ item, onDelete, onEdit }: HistoryLogItemCar
     );
   };
 
+  const [imageError, setImageError] = useState(false);
+
   if (item.type === 'food') {
+    const hasValidImage = Boolean(item.imageUri && !imageError);
+
     return (
       <Pressable
         onPress={() => onEdit?.(item)}
@@ -79,9 +84,17 @@ export function HistoryLogItemCard({ item, onDelete, onEdit }: HistoryLogItemCar
           onEdit && pressed && styles.cardPressed,
         ]}>
         <View style={styles.leftRow}>
-          {/* Ícone de Comida ou Câmera */}
+          {/* Thumbnail da Comida ou Ícone Fallback */}
           <View style={[styles.iconBox, styles.foodIconBox]}>
-            {item.entryMethod === 'image' ? (
+            {hasValidImage ? (
+              <Image
+                source={{ uri: item.imageUri! }}
+                style={styles.foodThumbImage}
+                contentFit="cover"
+                transition={200}
+                onError={() => setImageError(true)}
+              />
+            ) : item.entryMethod === 'image' ? (
               <Camera size={18} color={colors.primary} />
             ) : (
               <Utensils size={18} color={colors.primary} />
@@ -272,6 +285,11 @@ const styles = StyleSheet.create({
     backgroundColor: `${colors.primary}16`,
     borderWidth: 1,
     borderColor: `${colors.primary}30`,
+    overflow: 'hidden',
+  },
+  foodThumbImage: {
+    width: '100%',
+    height: '100%',
   },
   waterIconBox: {
     backgroundColor: `${colors.secondary}16`,

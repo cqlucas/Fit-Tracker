@@ -1,61 +1,23 @@
 import NetInfo from '@react-native-community/netinfo';
-import { and, eq, sql } from 'drizzle-orm';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { and, eq } from 'drizzle-orm';
 import { addDatabaseChangeListener } from 'expo-sqlite';
-import Storage from 'expo-sqlite/kv-store';
 import { AppState } from 'react-native';
 
 import { db } from '@/db/client';
 import {
+  DEFAULT_USER_ID,
   SYNC_TABLES,
   foodLogs,
   userGoals,
   waterLogs,
-  type FoodLog,
   type SyncTableName,
-  type UserGoals,
-  type WaterLog,
 } from '@/db/schema';
-
-import { isSupabaseConfigured, supabase } from './supabase';
-
-/**
- * SyncEngine — Local-First, Last-Write-Wins por `updated_at`.
- *
- *  PUSH: SELECT ... WHERE is_synced = 0 → supabase.upsert(onConflict: id)
- *        → UPDATE is_synced = 1 WHERE id = ? AND updated_at = <valor enviado>
- *        (a guarda em `updated_at` evita marcar como synced uma edição feita DURANTE o request).
- *
- *  PULL: SELECT * FROM remote WHERE server_updated_at > cursor
- *        → INSERT ... ON CONFLICT(id) DO UPDATE ... WHERE excluded.updated_at > local.updated_at
- *        Cursor em `server_updated_at` (relógio do Postgres) → imune a clock skew entre devices.
- *
- *  GATILHOS: boot, volta da conexão (NetInfo), app em foreground (AppState) e
- *            qualquer escrita local nas tabelas sincronizáveis (sqlite update hook, com debounce).
- */
-
-const PUSH_BATCH_SIZE = 200;
-const PULL_BATCH_SIZE = 500;
-const LOCAL_CHANGE_DEBOUNCE_MS = 1500;
-const CURSOR_KEY = (table: SyncTableName) => `sync:cursor:${table}`;
-const EPOCH = new Date(0).toISOString();
-
-type RemoteRow = Record<string, unknown> & { id: string; updated_at: string; server_updated_at: string };
-
-interface TableAdapter {
-  name: SyncTableName;
-  /** Lê até PUSH_BATCH_SIZE linhas sujas e devolve payload remoto + chave de confirmação. */
-  selectDirty(): Promise<{ payload: Record<string, unknown>[]; acks: Ack[] }>;
-  /** Marca como sincronizado somente se `updated_at` não mudou desde a leitura. */
-  markSynced(acks: Ack[]): void;
-  /** Aplica linhas remotas com LWW. */
-  applyRemote(rows: RemoteRow[]): void;
-  hasDirty(): boolean;
-}
-
-interface Ack {
-  id: string;
-  updatedAt: string;
-}
+import {
+  apiKeysService,
+  registerCredentialsChangeListener,
+} from '@/services/api-keys.service';
+import { getDynamicSupabaseClient } from './supabase';
 
 export interface SyncResult {
   ok: boolean;
@@ -65,245 +27,10 @@ export interface SyncResult {
   finishedAt: string;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Mapeamento local (camelCase + is_synced) ⇄ remoto (snake_case, sem is_synced)
-// ─────────────────────────────────────────────────────────────────────────────
-
-const goalsToRemote = (r: UserGoals) => ({
-  id: r.id,
-  protein_goal: r.proteinGoal,
-  water_goal: r.waterGoal,
-  calories_goal: r.caloriesGoal,
-  language: r.language,
-  updated_at: r.updatedAt,
-});
-
-const waterToRemote = (r: WaterLog) => ({
-  id: r.id,
-  amount_ml: r.amountMl,
-  date_key: r.dateKey,
-  created_at: r.createdAt,
-  updated_at: r.updatedAt,
-  deleted_at: r.deletedAt,
-});
-
-const foodToRemote = (r: FoodLog) => ({
-  id: r.id,
-  name: r.name,
-  protein_g: r.proteinG,
-  calories_kcal: r.caloriesKcal,
-  entry_method: r.entryMethod,
-  meal_window: r.mealWindow,
-  date_key: r.dateKey,
-  created_at: r.createdAt,
-  updated_at: r.updatedAt,
-  deleted_at: r.deletedAt,
-});
-
-const str = (v: unknown) => String(v);
-const num = (v: unknown) => Number(v);
-
-/** Normaliza timestamptz do Postgres ('...+00:00') para o mesmo formato ISO usado localmente ('...Z'). */
-const iso = (v: unknown) => new Date(String(v)).toISOString();
-const isoOrNull = (v: unknown) => (v == null ? null : iso(v));
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Adapters por tabela (explícitos = type-safe com Drizzle)
-// ─────────────────────────────────────────────────────────────────────────────
-
-const adapters: TableAdapter[] = [
-  {
-    name: 'user_goals',
-    async selectDirty() {
-      const rows = await db.select().from(userGoals).where(eq(userGoals.isSynced, false)).limit(PUSH_BATCH_SIZE);
-      return { payload: rows.map(goalsToRemote), acks: rows.map((r) => ({ id: r.id, updatedAt: r.updatedAt })) };
-    },
-    markSynced(acks) {
-      db.transaction((tx) => {
-        for (const a of acks) {
-          tx.update(userGoals)
-            .set({ isSynced: true })
-            .where(and(eq(userGoals.id, a.id), eq(userGoals.updatedAt, a.updatedAt)))
-            .run();
-        }
-      });
-    },
-    applyRemote(rows) {
-      db.transaction((tx) => {
-        for (const r of rows) {
-          const values = {
-            id: str(r.id),
-            proteinGoal: num(r.protein_goal),
-            waterGoal: num(r.water_goal),
-            caloriesGoal: num(r.calories_goal),
-            language: r.language === 'en' ? ('en' as const) : ('pt' as const),
-            updatedAt: iso(r.updated_at),
-            isSynced: true,
-          };
-          tx.insert(userGoals)
-            .values(values)
-            .onConflictDoUpdate({
-              target: userGoals.id,
-              set: values,
-              setWhere: sql`excluded.updated_at > ${userGoals.updatedAt}`,
-            })
-            .run();
-        }
-      });
-    },
-    hasDirty() {
-      return !!db.select({ id: userGoals.id }).from(userGoals).where(eq(userGoals.isSynced, false)).limit(1).get();
-    },
-  },
-  {
-    name: 'water_logs',
-    async selectDirty() {
-      const rows = await db.select().from(waterLogs).where(eq(waterLogs.isSynced, false)).limit(PUSH_BATCH_SIZE);
-      return { payload: rows.map(waterToRemote), acks: rows.map((r) => ({ id: r.id, updatedAt: r.updatedAt })) };
-    },
-    markSynced(acks) {
-      db.transaction((tx) => {
-        for (const a of acks) {
-          tx.update(waterLogs)
-            .set({ isSynced: true })
-            .where(and(eq(waterLogs.id, a.id), eq(waterLogs.updatedAt, a.updatedAt)))
-            .run();
-        }
-      });
-    },
-    applyRemote(rows) {
-      db.transaction((tx) => {
-        for (const r of rows) {
-          const values = {
-            id: str(r.id),
-            amountMl: num(r.amount_ml),
-            dateKey: str(r.date_key),
-            createdAt: iso(r.created_at),
-            updatedAt: iso(r.updated_at),
-            deletedAt: isoOrNull(r.deleted_at),
-            isSynced: true,
-          };
-          tx.insert(waterLogs)
-            .values(values)
-            .onConflictDoUpdate({
-              target: waterLogs.id,
-              set: values,
-              setWhere: sql`excluded.updated_at > ${waterLogs.updatedAt}`,
-            })
-            .run();
-        }
-      });
-    },
-    hasDirty() {
-      return !!db.select({ id: waterLogs.id }).from(waterLogs).where(eq(waterLogs.isSynced, false)).limit(1).get();
-    },
-  },
-  {
-    name: 'food_logs',
-    async selectDirty() {
-      const rows = await db.select().from(foodLogs).where(eq(foodLogs.isSynced, false)).limit(PUSH_BATCH_SIZE);
-      return { payload: rows.map(foodToRemote), acks: rows.map((r) => ({ id: r.id, updatedAt: r.updatedAt })) };
-    },
-    markSynced(acks) {
-      db.transaction((tx) => {
-        for (const a of acks) {
-          tx.update(foodLogs)
-            .set({ isSynced: true })
-            .where(and(eq(foodLogs.id, a.id), eq(foodLogs.updatedAt, a.updatedAt)))
-            .run();
-        }
-      });
-    },
-    applyRemote(rows) {
-      db.transaction((tx) => {
-        for (const r of rows) {
-          const values = {
-            id: str(r.id),
-            name: str(r.name),
-            proteinG: num(r.protein_g),
-            caloriesKcal: num(r.calories_kcal),
-            entryMethod: r.entry_method === 'image' ? ('image' as const) : ('manual' as const),
-            mealWindow: (['breakfast', 'lunch', 'dinner', 'snack'].includes(String(r.meal_window))
-              ? r.meal_window
-              : 'lunch') as 'breakfast' | 'lunch' | 'dinner' | 'snack',
-            dateKey: str(r.date_key),
-            createdAt: iso(r.created_at),
-            updatedAt: iso(r.updated_at),
-            deletedAt: isoOrNull(r.deleted_at),
-            isSynced: true,
-          };
-          tx.insert(foodLogs)
-            .values(values)
-            .onConflictDoUpdate({
-              target: foodLogs.id,
-              set: values,
-              setWhere: sql`excluded.updated_at > ${foodLogs.updatedAt}`,
-            })
-            .run();
-        }
-      });
-    },
-    hasDirty() {
-      return !!db.select({ id: foodLogs.id }).from(foodLogs).where(eq(foodLogs.isSynced, false)).limit(1).get();
-    },
-  },
-];
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Push / Pull
-// ─────────────────────────────────────────────────────────────────────────────
-
-async function pushTable(adapter: TableAdapter): Promise<number> {
-  if (!supabase) return 0;
-  let total = 0;
-
-  // Loop até esvaziar a fila (lotes de PUSH_BATCH_SIZE).
-  while (true) {
-    const { payload, acks } = await adapter.selectDirty();
-    if (payload.length === 0) break;
-
-    const { error } = await supabase.from(adapter.name).upsert(payload, { onConflict: 'id' });
-    if (error) throw new Error(`[push:${adapter.name}] ${error.message}`);
-
-    adapter.markSynced(acks);
-    total += payload.length;
-    if (payload.length < PUSH_BATCH_SIZE) break;
-  }
-  return total;
-}
-
-async function pullTable(adapter: TableAdapter): Promise<number> {
-  if (!supabase) return 0;
-  let total = 0;
-  let cursor = (await Storage.getItem(CURSOR_KEY(adapter.name))) ?? EPOCH;
-
-  while (true) {
-    const { data, error } = await supabase
-      .from(adapter.name)
-      .select('*')
-      .gt('server_updated_at', cursor)
-      .order('server_updated_at', { ascending: true })
-      .limit(PULL_BATCH_SIZE);
-
-    if (error) throw new Error(`[pull:${adapter.name}] ${error.message}`);
-    const rows = (data ?? []) as RemoteRow[];
-    if (rows.length === 0) break;
-
-    adapter.applyRemote(rows);
-    cursor = rows[rows.length - 1].server_updated_at;
-    await Storage.setItem(CURSOR_KEY(adapter.name), cursor);
-    total += rows.length;
-    if (rows.length < PULL_BATCH_SIZE) break;
-  }
-  return total;
-}
-
-const emptyCounts = (): Record<SyncTableName, number> =>
-  Object.fromEntries(SYNC_TABLES.map((t) => [t, 0])) as Record<SyncTableName, number>;
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Engine
-// ─────────────────────────────────────────────────────────────────────────────
+export type SchemaVerificationResult =
+  | { status: 'ready' }
+  | { status: 'missing_tables'; table: string }
+  | { status: 'invalid_credentials'; message: string };
 
 export interface SyncState {
   isSyncing: boolean;
@@ -314,19 +41,409 @@ export interface SyncState {
 
 export type Listener = (state: SyncState) => void;
 
+const PUSH_BATCH_SIZE = 200;
+const LOCAL_CHANGE_DEBOUNCE_MS = 1500;
+const EPOCH = new Date(0).toISOString();
+
+const emptyCounts = (): Record<SyncTableName, number> =>
+  Object.fromEntries(SYNC_TABLES.map((t) => [t, 0])) as Record<SyncTableName, number>;
+
+/**
+ * Valida se as credenciais fornecidas possuem acesso ao Supabase e se
+ * as 3 tabelas requeridas existem e estão prontas para sincronização.
+ */
+export async function verifySupabaseSchema(
+  client?: SupabaseClient | null,
+): Promise<SchemaVerificationResult> {
+  const targetClient = client ?? (await getDynamicSupabaseClient());
+
+  if (!targetClient) {
+    return {
+      status: 'invalid_credentials',
+      message: 'Credenciais do Supabase não configuradas.',
+    };
+  }
+
+  for (const table of SYNC_TABLES) {
+    try {
+      const { error } = await targetClient.from(table).select('id').limit(1);
+
+      if (error) {
+        const errorMsg = (error.message || '').toLowerCase();
+        const code = error.code || '';
+
+        // Tabela inexistente no Postgres / PostgREST
+        if (
+          code === '42P01' ||
+          code === 'PGRST205' ||
+          errorMsg.includes('does not exist') ||
+          errorMsg.includes('relation') ||
+          errorMsg.includes('could not find the table')
+        ) {
+          return { status: 'missing_tables', table };
+        }
+
+        // Erro de autenticação, JWT inválido ou chave anônima incorreta
+        return {
+          status: 'invalid_credentials',
+          message: error.message || 'Erro de autenticação no Supabase.',
+        };
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { status: 'invalid_credentials', message };
+    }
+  }
+
+  return { status: 'ready' };
+}
+
+/**
+ * Motor central de Sincronização Bidirecional (Push & Pull).
+ * Mantém o app 100% Local-First.
+ */
+export async function syncWithSupabase(options?: {
+  forceFullSync?: boolean;
+}): Promise<SyncResult> {
+  const pushed = emptyCounts();
+  const pulled = emptyCounts();
+  const finishedAt = new Date().toISOString();
+
+  // 1. Guarda Inicial: conexão de rede
+  const netState = await NetInfo.fetch();
+  const isOnline = !!netState.isConnected && netState.isInternetReachable !== false;
+  if (!isOnline) {
+    return { ok: false, pushed, pulled, error: 'offline', finishedAt };
+  }
+
+  // 2. Guarda Inicial: cliente Supabase dinâmico
+  const client = await getDynamicSupabaseClient();
+  if (!client) {
+    return { ok: false, pushed, pulled, error: 'unconfigured', finishedAt };
+  }
+
+  try {
+    // ─────────────────────────────────────────────────────────────────────────
+    // FASE 1: Resolução Inteligente de Metas (user_goals)
+    // ─────────────────────────────────────────────────────────────────────────
+    const localGoal = db
+      .select()
+      .from(userGoals)
+      .where(eq(userGoals.id, DEFAULT_USER_ID))
+      .get();
+
+    const { data: remoteGoalData, error: remoteGoalErr } = await client
+      .from('user_goals')
+      .select('*')
+      .eq('id', DEFAULT_USER_ID)
+      .maybeSingle();
+
+    if (remoteGoalErr) {
+      // Se a tabela ainda não existir, aborte informando o motivo
+      const msg = remoteGoalErr.message?.toLowerCase() || '';
+      if (msg.includes('does not exist') || remoteGoalErr.code === '42P01' || remoteGoalErr.code === 'PGRST205') {
+        return { ok: false, pushed, pulled, error: 'missing_tables', finishedAt };
+      }
+      throw new Error(`[sync:user_goals] ${remoteGoalErr.message}`);
+    }
+
+    if (remoteGoalData) {
+      // Metas existem no Supabase
+      const remoteUpdatedAtTime = new Date(remoteGoalData.updated_at).getTime();
+      const localUpdatedAtTime = localGoal ? new Date(localGoal.updatedAt).getTime() : 0;
+      const isLocalEpoch =
+        !localGoal ||
+        localGoal.updatedAt === EPOCH ||
+        localGoal.updatedAt === new Date(0).toISOString();
+
+      if (isLocalEpoch || remoteUpdatedAtTime > localUpdatedAtTime) {
+        // Remoto é mais novo ou local ainda estava no seed padrão de fábrica -> PULL
+        const newValues = {
+          id: DEFAULT_USER_ID,
+          proteinGoal: Number(remoteGoalData.protein_goal),
+          waterGoal: Number(remoteGoalData.water_goal),
+          caloriesGoal: Number(remoteGoalData.calories_goal),
+          language: remoteGoalData.language === 'en' ? ('en' as const) : ('pt' as const),
+          preferredAiProvider:
+            remoteGoalData.preferred_ai_provider === 'groq' ? ('groq' as const) : ('gemini' as const),
+          updatedAt: new Date(remoteGoalData.updated_at).toISOString(),
+          isSynced: true,
+        };
+
+        db.transaction((tx) => {
+          if (localGoal) {
+            tx.update(userGoals).set(newValues).where(eq(userGoals.id, DEFAULT_USER_ID)).run();
+          } else {
+            tx.insert(userGoals).values(newValues).run();
+          }
+        });
+        pulled.user_goals = 1;
+      } else if (localGoal && !localGoal.isSynced && localUpdatedAtTime >= remoteUpdatedAtTime) {
+        // Local é mais novo e está sujo -> PUSH
+        const { error: pushErr } = await client.from('user_goals').upsert(
+          {
+            id: DEFAULT_USER_ID,
+            protein_goal: localGoal.proteinGoal,
+            water_goal: localGoal.waterGoal,
+            calories_goal: localGoal.caloriesGoal,
+            language: localGoal.language,
+            preferred_ai_provider: localGoal.preferredAiProvider,
+            updated_at: localGoal.updatedAt,
+          },
+          { onConflict: 'id' },
+        );
+        if (pushErr) throw new Error(`[push:user_goals] ${pushErr.message}`);
+
+        db.update(userGoals)
+          .set({ isSynced: true })
+          .where(and(eq(userGoals.id, DEFAULT_USER_ID), eq(userGoals.updatedAt, localGoal.updatedAt)))
+          .run();
+        pushed.user_goals = 1;
+      }
+    } else if (localGoal) {
+      // Remoto ainda não existe -> PUSH inicial das metas locais
+      const { error: pushErr } = await client.from('user_goals').upsert(
+        {
+          id: DEFAULT_USER_ID,
+          protein_goal: localGoal.proteinGoal,
+          water_goal: localGoal.waterGoal,
+          calories_goal: localGoal.caloriesGoal,
+          language: localGoal.language,
+          preferred_ai_provider: localGoal.preferredAiProvider,
+          updated_at: localGoal.updatedAt,
+        },
+        { onConflict: 'id' },
+      );
+      if (pushErr) throw new Error(`[push:user_goals:initial] ${pushErr.message}`);
+
+      db.update(userGoals)
+        .set({ isSynced: true })
+        .where(eq(userGoals.id, DEFAULT_USER_ID))
+        .run();
+      pushed.user_goals = 1;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // FASE 2: PUSH (SQLite Local -> Supabase)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    // 2.1 Push Water Logs
+    while (true) {
+      const dirtyWater = db
+        .select()
+        .from(waterLogs)
+        .where(eq(waterLogs.isSynced, false))
+        .limit(PUSH_BATCH_SIZE)
+        .all();
+
+      if (dirtyWater.length === 0) break;
+
+      const payload = dirtyWater.map((w) => ({
+        id: w.id,
+        amount_ml: w.amountMl,
+        date_key: w.dateKey,
+        created_at: w.createdAt,
+        updated_at: w.updatedAt,
+        deleted_at: w.deletedAt,
+      }));
+
+      const { error: pushWaterErr } = await client.from('water_logs').upsert(payload, { onConflict: 'id' });
+      if (pushWaterErr) throw new Error(`[push:water_logs] ${pushWaterErr.message}`);
+
+      db.transaction((tx) => {
+        for (const w of dirtyWater) {
+          tx.update(waterLogs)
+            .set({ isSynced: true })
+            .where(and(eq(waterLogs.id, w.id), eq(waterLogs.updatedAt, w.updatedAt)))
+            .run();
+        }
+      });
+
+      pushed.water_logs += dirtyWater.length;
+      if (dirtyWater.length < PUSH_BATCH_SIZE) break;
+    }
+
+    // 2.2 Push Food Logs
+    while (true) {
+      const dirtyFood = db
+        .select()
+        .from(foodLogs)
+        .where(eq(foodLogs.isSynced, false))
+        .limit(PUSH_BATCH_SIZE)
+        .all();
+
+      if (dirtyFood.length === 0) break;
+
+      const payload = dirtyFood.map((f) => ({
+        id: f.id,
+        name: f.name,
+        protein_g: f.proteinG,
+        calories_kcal: f.caloriesKcal,
+        meal_window: f.mealWindow,
+        entry_method: f.entryMethod,
+        image_uri: f.imageUri ?? null,
+        date_key: f.dateKey,
+        created_at: f.createdAt,
+        updated_at: f.updatedAt,
+        deleted_at: f.deletedAt,
+      }));
+
+      const { error: pushFoodErr } = await client.from('food_logs').upsert(payload, { onConflict: 'id' });
+      if (pushFoodErr) throw new Error(`[push:food_logs] ${pushFoodErr.message}`);
+
+      db.transaction((tx) => {
+        for (const f of dirtyFood) {
+          tx.update(foodLogs)
+            .set({ isSynced: true })
+            .where(and(eq(foodLogs.id, f.id), eq(foodLogs.updatedAt, f.updatedAt)))
+            .run();
+        }
+      });
+
+      pushed.food_logs += dirtyFood.length;
+      if (dirtyFood.length < PUSH_BATCH_SIZE) break;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // FASE 3: PULL (Supabase -> SQLite Local — Recuperação Completa)
+    // ─────────────────────────────────────────────────────────────────────────
+    const lastSyncTimestamp = options?.forceFullSync
+      ? null
+      : await apiKeysService.getLastSyncTimestamp();
+
+    // 3.1 Pull Water Logs
+    let waterQuery = client.from('water_logs').select('*');
+    if (lastSyncTimestamp) {
+      // Margem de segurança de 60s para imprecisões de relógio entre dispositivos
+      const safetyTime = new Date(new Date(lastSyncTimestamp).getTime() - 60000).toISOString();
+      waterQuery = waterQuery.gte('updated_at', safetyTime);
+    }
+
+    const { data: remoteWaterRows, error: pullWaterErr } = await waterQuery;
+    if (pullWaterErr) throw new Error(`[pull:water_logs] ${pullWaterErr.message}`);
+
+    if (remoteWaterRows && remoteWaterRows.length > 0) {
+      db.transaction((tx) => {
+        for (const r of remoteWaterRows) {
+          const local = tx.select().from(waterLogs).where(eq(waterLogs.id, String(r.id))).get();
+
+          const remoteValues = {
+            id: String(r.id),
+            amountMl: Number(r.amount_ml),
+            dateKey: String(r.date_key),
+            createdAt: new Date(String(r.created_at)).toISOString(),
+            updatedAt: new Date(String(r.updated_at)).toISOString(),
+            deletedAt: r.deleted_at ? new Date(String(r.deleted_at)).toISOString() : null,
+            isSynced: true,
+          };
+
+          if (!local) {
+            tx.insert(waterLogs).values(remoteValues).run();
+            pulled.water_logs++;
+          } else {
+            const isRemoteNewer =
+              new Date(remoteValues.updatedAt).getTime() > new Date(local.updatedAt).getTime();
+            if (isRemoteNewer || local.isSynced) {
+              tx.update(waterLogs).set(remoteValues).where(eq(waterLogs.id, String(r.id))).run();
+              pulled.water_logs++;
+            }
+          }
+        }
+      });
+    }
+
+    // 3.2 Pull Food Logs
+    let foodQuery = client.from('food_logs').select('*');
+    if (lastSyncTimestamp) {
+      const safetyTime = new Date(new Date(lastSyncTimestamp).getTime() - 60000).toISOString();
+      foodQuery = foodQuery.gte('updated_at', safetyTime);
+    }
+
+    const { data: remoteFoodRows, error: pullFoodErr } = await foodQuery;
+    if (pullFoodErr) throw new Error(`[pull:food_logs] ${pullFoodErr.message}`);
+
+    if (remoteFoodRows && remoteFoodRows.length > 0) {
+      db.transaction((tx) => {
+        for (const r of remoteFoodRows) {
+          const local = tx.select().from(foodLogs).where(eq(foodLogs.id, String(r.id))).get();
+
+          const remoteValues = {
+            id: String(r.id),
+            name: String(r.name),
+            proteinG: Number(r.protein_g),
+            caloriesKcal: Number(r.calories_kcal),
+            mealWindow: (['breakfast', 'lunch', 'dinner', 'snack'].includes(String(r.meal_window))
+              ? r.meal_window
+              : 'lunch') as 'breakfast' | 'lunch' | 'dinner' | 'snack',
+            entryMethod: r.entry_method === 'image' ? ('image' as const) : ('manual' as const),
+            imageUri: r.image_uri ? String(r.image_uri) : null,
+            dateKey: String(r.date_key),
+            createdAt: new Date(String(r.created_at)).toISOString(),
+            updatedAt: new Date(String(r.updated_at)).toISOString(),
+            deletedAt: r.deleted_at ? new Date(String(r.deleted_at)).toISOString() : null,
+            isSynced: true,
+          };
+
+          if (!local) {
+            tx.insert(foodLogs).values(remoteValues).run();
+            pulled.food_logs++;
+          } else {
+            const isRemoteNewer =
+              new Date(remoteValues.updatedAt).getTime() > new Date(local.updatedAt).getTime();
+            if (isRemoteNewer || local.isSynced) {
+              tx.update(foodLogs).set(remoteValues).where(eq(foodLogs.id, String(r.id))).run();
+              pulled.food_logs++;
+            }
+          }
+        }
+      });
+    }
+
+    // 4. Salva o timestamp de sync com sucesso no SecureStore
+    await apiKeysService.saveLastSyncTimestamp(finishedAt);
+
+    return {
+      ok: true,
+      pushed,
+      pulled,
+      finishedAt,
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (__DEV__) console.warn('[syncWithSupabase] Erro durante a sincronização:', message);
+    return {
+      ok: false,
+      pushed,
+      pulled,
+      error: message,
+      finishedAt,
+    };
+  }
+}
+
+/**
+ * SyncEngine: Gerenciador de ciclo de vida e agendador de sincronização em segundo plano.
+ */
 class SyncEngine {
   private inFlight: Promise<SyncResult> | null = null;
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
   private subscriptions: (() => void)[] = [];
   private isOnline = false;
+  private isLinked = false;
   private lastResult: SyncResult | null = null;
   private listeners = new Set<Listener>();
 
-  get isEnabled() {
-    return isSupabaseConfigured;
+  constructor() {
+    registerCredentialsChangeListener(() => {
+      void this.refreshEnabledStatus();
+    });
   }
 
-  get online() {
+  get isEnabled(): boolean {
+    return this.isLinked;
+  }
+
+  get online(): boolean {
     return this.isOnline;
   }
 
@@ -334,35 +451,47 @@ class SyncEngine {
     return {
       isSyncing: !!this.inFlight,
       isOnline: this.isOnline,
-      isEnabled: this.isEnabled,
+      isEnabled: this.isLinked,
       lastResult: this.lastResult,
     };
   }
 
-  /** Idempotente. Chame uma vez no root layout. */
-  start(): void {
-    if (!this.isEnabled) {
-      if (__DEV__) console.info('[sync] Supabase não configurado — rodando 100% offline.');
+  async refreshEnabledStatus(): Promise<void> {
+    const client = await getDynamicSupabaseClient();
+    const wasLinked = this.isLinked;
+    this.isLinked = Boolean(client);
+
+    if (this.isLinked !== wasLinked) {
       this.emit();
-      return;
+      if (this.isLinked && this.isOnline) {
+        this.requestSync(0);
+      }
     }
+  }
+
+  start(): void {
     if (this.subscriptions.length > 0) return;
+
+    void this.refreshEnabledStatus();
 
     const netSub = NetInfo.addEventListener((state) => {
       const wasOnline = this.isOnline;
       this.isOnline = !!state.isConnected && state.isInternetReachable !== false;
       this.emit();
-      if (this.isOnline && !wasOnline) this.requestSync(0);
+      if (this.isOnline && !wasOnline && this.isLinked) {
+        this.requestSync(0);
+      }
     });
 
     const appStateSub = AppState.addEventListener('change', (status) => {
-      if (status === 'active') this.requestSync(0);
+      if (status === 'active' && this.isLinked) {
+        this.requestSync(0);
+      }
     });
 
     const dbSub = addDatabaseChangeListener(({ tableName }) => {
-      // Escritas feitas pelo próprio sync (markSynced/applyRemote) são ignoradas aqui;
-      // o pós-sync verifica se sobrou algo sujo.
       if (this.inFlight) return;
+      if (!this.isLinked) return;
       if ((SYNC_TABLES as readonly string[]).includes(tableName)) {
         this.requestSync(LOCAL_CHANGE_DEBOUNCE_MS);
       }
@@ -373,7 +502,9 @@ class SyncEngine {
     NetInfo.fetch().then((state) => {
       this.isOnline = !!state.isConnected && state.isInternetReachable !== false;
       this.emit();
-      this.requestSync(0);
+      if (this.isOnline && this.isLinked) {
+        this.requestSync(0);
+      }
     });
   }
 
@@ -384,9 +515,8 @@ class SyncEngine {
     this.debounceTimer = null;
   }
 
-  /** Agenda um sync com debounce (coalesce múltiplas escritas rápidas). */
   requestSync(delayMs = LOCAL_CHANGE_DEBOUNCE_MS): void {
-    if (!this.isEnabled) return;
+    if (!this.isLinked) return;
     if (this.debounceTimer) clearTimeout(this.debounceTimer);
     this.debounceTimer = setTimeout(() => {
       this.debounceTimer = null;
@@ -394,14 +524,14 @@ class SyncEngine {
     }, delayMs);
   }
 
-  /** Executa push → pull. Se já houver um sync em andamento, reaproveita a mesma Promise (mutex). */
-  syncNow(): Promise<SyncResult> {
+  syncNow(options?: { forceFullSync?: boolean }): Promise<SyncResult> {
     if (this.inFlight) return this.inFlight;
-    this.inFlight = this.run().finally(() => {
+    this.inFlight = syncWithSupabase(options).then((res) => {
+      this.lastResult = res;
+      return res;
+    }).finally(() => {
       this.inFlight = null;
       this.emit();
-      // Usuário escreveu algo enquanto o sync rodava? Agenda outra rodada.
-      if (this.lastResult?.ok && adapters.some((a) => a.hasDirty())) this.requestSync(0);
     });
     this.emit();
     return this.inFlight;
@@ -411,37 +541,6 @@ class SyncEngine {
     this.listeners.add(listener);
     listener(this.getState());
     return () => this.listeners.delete(listener);
-  }
-
-  /** Útil para "logout"/reset: força pull completo no próximo sync. */
-  async resetCursors(): Promise<void> {
-    await Promise.all(SYNC_TABLES.map((t) => Storage.removeItem(CURSOR_KEY(t))));
-  }
-
-  private async run(): Promise<SyncResult> {
-    const pushed = emptyCounts();
-    const pulled = emptyCounts();
-
-    if (!supabase || !this.isOnline) {
-      return this.finish({ ok: false, pushed, pulled, error: 'offline', finishedAt: new Date().toISOString() });
-    }
-
-    try {
-      // Push primeiro: garante que edições locais cheguem antes de o pull comparar timestamps.
-      for (const adapter of adapters) pushed[adapter.name] = await pushTable(adapter);
-      for (const adapter of adapters) pulled[adapter.name] = await pullTable(adapter);
-      return this.finish({ ok: true, pushed, pulled, finishedAt: new Date().toISOString() });
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
-      if (__DEV__) console.warn('[sync] falhou:', message);
-      // Nada é perdido: linhas continuam com is_synced = 0 e serão reenviadas no próximo gatilho.
-      return this.finish({ ok: false, pushed, pulled, error: message, finishedAt: new Date().toISOString() });
-    }
-  }
-
-  private finish(result: SyncResult): SyncResult {
-    this.lastResult = result;
-    return result;
   }
 
   private emit(): void {
