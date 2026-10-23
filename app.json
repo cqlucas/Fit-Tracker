@@ -22,7 +22,8 @@
         "backgroundColor": "#0e121a"
       },
       "predictiveBackGestureEnabled": false,
-      "userInterfaceStyle": "dark"
+      "userInterfaceStyle": "dark",
+      "package": "com.sircord.fittracker"
     },
     "web": {
       "output": "server",
@@ -49,6 +50,16 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {
+        "asyncRoutes": {
+          "web": true
+        }
+      },
+      "eas": {
+        "projectId": "e702ae7f-1009-47a5-afa9-ed24fe18c734"
+      }
     }
   }
 }
