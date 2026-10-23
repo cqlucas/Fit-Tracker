@@ -9,7 +9,7 @@ import {
   RotateCcw,
   X,
 } from 'lucide-react-native';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Modal,
   Pressable,
@@ -19,6 +19,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useLanguage } from '@/context/LanguageContext';
 import { colors, radii, spacing } from '@/theme/tokens';
@@ -48,11 +49,23 @@ export function OptionalDateTimePicker({
   isPt: isPtProp,
   isEditMode = false,
 }: OptionalDateTimePickerProps) {
+  const insets = useSafeAreaInsets();
   const { isPt: contextIsPt } = useLanguage();
   const isPt = isPtProp ?? contextIsPt;
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [tempDate, setTempDate] = useState<Date>(new Date());
+  const daysScrollRef = useRef<React.ElementRef<typeof ScrollView>>(null);
+
+  // Garante que ao abrir o modal o scroll horizontal vá para a extrema direita (Hoje)
+  useEffect(() => {
+    if (isModalOpen) {
+      const timer = setTimeout(() => {
+        daysScrollRef.current?.scrollToEnd({ animated: false });
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [isModalOpen]);
 
   // Abre o modal sincronizando o estado temporário
   const handleOpenModal = () => {
@@ -127,17 +140,18 @@ export function OptionalDateTimePicker({
     setSpecificTime(now.getHours(), now.getMinutes());
   };
 
-  // 7 dias recentes para seleção rápida
+  // Dias recentes para seleção rápida: do passado (esquerda) até Hoje (extrema direita)
   const recentDays = useMemo(() => {
     const todayKey = toDateKey(new Date());
     const weekdaysPt = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
     const weekdaysEn = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-    return Array.from({ length: 7 }, (_, i) => {
-      const key = addDays(todayKey, -i);
+    return Array.from({ length: 8 }, (_, i) => {
+      const daysAgo = 7 - i; // 7, 6, 5, 4, 3, 2, 1, 0 (Hoje fica no final, extrema direita)
+      const key = addDays(todayKey, -daysAgo);
       const dateObj = fromDateKey(key);
-      const isTodayKey = i === 0;
-      const isYesterdayKey = i === 1;
+      const isTodayKey = daysAgo === 0;
+      const isYesterdayKey = daysAgo === 1;
 
       let label = isTodayKey
         ? isPt
@@ -263,7 +277,11 @@ export function OptionalDateTimePicker({
         <View style={styles.modalBackdrop}>
           <Pressable style={styles.modalDismissArea} onPress={handleCloseModal} />
 
-          <View style={styles.sheetContainer}>
+          <View
+            style={[
+              styles.sheetContainer,
+              { paddingBottom: Math.max(insets.bottom + spacing.md, spacing.xl) },
+            ]}>
             {/* Handle visual decorativo */}
             <View style={styles.sheetHandleRow}>
               <View style={styles.sheetHandle} />
@@ -321,11 +339,15 @@ export function OptionalDateTimePicker({
                   </View>
                 </View>
 
-                {/* Carrossel horizontal de dias recentes */}
+                {/* Carrossel horizontal de dias recentes: scrollado para o final (Hoje à direita) */}
                 <ScrollView
+                  ref={daysScrollRef}
                   horizontal
                   showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.daysScrollContent}>
+                  contentContainerStyle={styles.daysScrollContent}
+                  onContentSizeChange={() => {
+                    daysScrollRef.current?.scrollToEnd({ animated: false });
+                  }}>
                   {recentDays.map((item) => {
                     const isSelected = item.key === tempDateKey;
                     return (
