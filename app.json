@@ -4,18 +4,22 @@
     "slug": "Fit-Tracker",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/app-icon.png",
     "scheme": "fittracker",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#10141a",
     "ios": {
       "supportsTablet": true,
-      "userInterfaceStyle": "dark"
+      "userInterfaceStyle": "dark",
+      "icon": "./assets/images/app-icon.png"
     },
     "android": {
+      "icon": "./assets/images/app-icon.png",
       "adaptiveIcon": {
-        "backgroundColor": "#10141a",
-        "foregroundImage": "./assets/images/icon.png"
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "backgroundImage": "./assets/images/android-icon-background.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png",
+        "backgroundColor": "#0e121a"
       },
       "predictiveBackGestureEnabled": false,
       "userInterfaceStyle": "dark"
@@ -30,13 +34,13 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#10141a",
-          "image": "./assets/images/icon.png",
-          "imageWidth": 160,
+          "backgroundColor": "#0e121a",
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 200,
           "resizeMode": "contain",
           "dark": {
-            "image": "./assets/images/icon.png",
-            "backgroundColor": "#10141a"
+            "image": "./assets/images/splash-icon.png",
+            "backgroundColor": "#0e121a"
           }
         }
       ],
