@@ -17,15 +17,6 @@ export const expoDb = openDatabaseSync(DATABASE_NAME, { enableChangeListener: tr
 // Inicialização automática e síncrona: tabelas + seed existem antes de qualquer import usar `db`.
 runMigrationsSync(expoDb);
 
-// Migração segura defensiva para garantir a coluna preferred_ai_provider em bancos existentes
-try {
-  expoDb.execSync(
-    `ALTER TABLE user_goals ADD COLUMN preferred_ai_provider TEXT NOT NULL DEFAULT 'gemini';`
-  );
-} catch {
-  // Ignora se a coluna já existir (ex: duplicate column name)
-}
-
 export const db = drizzle(expoDb, { schema });
 
 export type Database = typeof db;

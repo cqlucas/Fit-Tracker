@@ -21,7 +21,6 @@ const MIGRATIONS: readonly string[] = [
     protein_goal  INTEGER NOT NULL DEFAULT 160,
     water_goal    INTEGER NOT NULL DEFAULT 3000,
     calories_goal INTEGER NOT NULL DEFAULT 2200,
-    language      TEXT NOT NULL DEFAULT 'pt',
     updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     is_synced     INTEGER NOT NULL DEFAULT 0
   );
@@ -44,7 +43,6 @@ const MIGRATIONS: readonly string[] = [
     protein_g      REAL NOT NULL CHECK (protein_g >= 0),
     calories_kcal  INTEGER NOT NULL CHECK (calories_kcal >= 0),
     entry_method   TEXT NOT NULL DEFAULT 'manual' CHECK (entry_method IN ('manual', 'image')),
-    meal_window    TEXT NOT NULL DEFAULT 'lunch' CHECK (meal_window IN ('breakfast', 'lunch', 'dinner', 'snack')),
     date_key       TEXT NOT NULL,
     created_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
@@ -64,6 +62,42 @@ const MIGRATIONS: readonly string[] = [
 
 export const SCHEMA_VERSION = MIGRATIONS.length;
 
+/** Verifica se uma coluna já existe em uma tabela para evitar falhas de duplicidade. */
+function columnExists(db: SQLiteDatabase, tableName: string, columnName: string): boolean {
+  try {
+    const columns = db.getAllSync<{ name: string }>(`PRAGMA table_info(${tableName})`);
+    return columns.some((col) => col.name.toLowerCase() === columnName.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
+/** Executa uma migration com segurança defensiva contra duplicate column name. */
+function executeMigrationStep(db: SQLiteDatabase, sql: string): void {
+  const trimmed = sql.trim();
+  const alterAddColMatch = trimmed.match(
+    /^ALTER\s+TABLE\s+([a-zA-Z0-9_]+)\s+ADD(?:\s+COLUMN)?\s+([a-zA-Z0-9_]+)/i
+  );
+
+  if (alterAddColMatch) {
+    const tableName = alterAddColMatch[1];
+    const columnName = alterAddColMatch[2];
+    if (columnExists(db, tableName, columnName)) {
+      return;
+    }
+  }
+
+  try {
+    db.execSync(trimmed);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (message.includes('duplicate column name')) {
+      return;
+    }
+    throw err;
+  }
+}
+
 /** Executa migrations pendentes + seed. Idempotente e síncrono. */
 export function runMigrationsSync(db: SQLiteDatabase): void {
   db.execSync(`PRAGMA journal_mode = WAL;`);
@@ -74,7 +108,7 @@ export function runMigrationsSync(db: SQLiteDatabase): void {
   if (currentVersion < SCHEMA_VERSION) {
     db.withTransactionSync(() => {
       for (let v = currentVersion; v < SCHEMA_VERSION; v++) {
-        db.execSync(MIGRATIONS[v]);
+        executeMigrationStep(db, MIGRATIONS[v]);
       }
       // PRAGMA não aceita bind params; o valor é uma constante numérica interna.
       db.execSync(`PRAGMA user_version = ${SCHEMA_VERSION}`);
