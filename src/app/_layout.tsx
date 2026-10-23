@@ -1,3 +1,4 @@
+import { isRunningInExpoGo } from 'expo';
 import { DarkTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
@@ -10,10 +11,15 @@ import { syncEngine } from '@/sync/sync.service';
 import { colors } from '@/theme/tokens';
 
 SplashScreen.preventAutoHideAsync();
-SplashScreen.setOptions({
-  duration: 400,
-  fade: true,
-});
+
+// SplashScreen.setOptions só é suportado em Development Builds e builds standalone.
+// No Expo Go, a tentativa de chamada emite um warning nativo.
+if (!isRunningInExpoGo()) {
+  SplashScreen.setOptions({
+    duration: 400,
+    fade: true,
+  });
+}
 
 const customDarkTheme = {
   ...DarkTheme,

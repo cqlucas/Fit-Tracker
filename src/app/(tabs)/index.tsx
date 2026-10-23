@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
-import { Award, Dumbbell, Droplets } from 'lucide-react-native';
-import React, { useMemo } from 'react';
+import { Award, Droplets, Dumbbell } from 'lucide-react-native';
+import { useMemo } from 'react';
 import {
   RefreshControl,
   ScrollView,
