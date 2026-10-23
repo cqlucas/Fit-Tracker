@@ -50,3 +50,35 @@ export function dateKeysInRange(startDateKey: string, endDateKey: string): strin
   }
   return result;
 }
+
+/** Verifica se uma data corresponde ao dia de hoje no fuso local. */
+export function isToday(date: Date): boolean {
+  return toDateKey(date) === toDateKey(new Date());
+}
+
+/** Verifica se uma data corresponde ao dia de ontem no fuso local. */
+export function isYesterday(date: Date): boolean {
+  return toDateKey(date) === addDays(toDateKey(new Date()), -1);
+}
+
+/** Formata data e hora para exibição amigável em chips e detalhes de logs. */
+export function formatDateTimeFriendly(date: Date, isPt: boolean = true): string {
+  const hours = pad(date.getHours());
+  const minutes = pad(date.getMinutes());
+  const timeStr = `${hours}:${minutes}`;
+
+  if (isToday(date)) {
+    return isPt ? `Hoje às ${timeStr}` : `Today at ${timeStr}`;
+  }
+  if (isYesterday(date)) {
+    return isPt ? `Ontem às ${timeStr}` : `Yesterday at ${timeStr}`;
+  }
+
+  const day = pad(date.getDate());
+  const monthNamesPt = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+  const monthNamesEn = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const month = (isPt ? monthNamesPt : monthNamesEn)[date.getMonth()];
+
+  return isPt ? `${day} de ${month} às ${timeStr}` : `${month} ${day} at ${timeStr}`;
+}
+

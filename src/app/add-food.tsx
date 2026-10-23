@@ -16,6 +16,7 @@ import { MacroInputsSection } from '@/components/food/MacroInputsSection';
 import { MealWindowSelector } from '@/components/food/MealWindowSelector';
 import { MetabolicScoreCard } from '@/components/food/MetabolicScoreCard';
 import { SaveFoodButton } from '@/components/food/SaveFoodButton';
+import { OptionalDateTimePicker } from '@/components/ui/OptionalDateTimePicker';
 import { useLanguage } from '@/context/LanguageContext';
 import { MealWindow } from '@/db/schema';
 import { logsRepository } from '@/repositories/logs.repository';
@@ -39,6 +40,7 @@ export default function AddFoodScreen() {
   const [imageMimeType, setImageMimeType] = useState<string>('image/jpeg');
   const [aiContextText, setAiContextText] = useState('');
   const [existingDateKey, setExistingDateKey] = useState<string | undefined>(undefined);
+  const [customDateTime, setCustomDateTime] = useState<Date | null>(null);
 
   // Estados de carregamento e feedback
   const [isAnalyzingImage, setIsAnalyzingImage] = useState(false);
@@ -58,6 +60,9 @@ export default function AddFoodScreen() {
           setCaloriesKcal(log.caloriesKcal);
           setMealWindow(log.mealWindow);
           setExistingDateKey(log.dateKey);
+          if (log.createdAt) {
+            setCustomDateTime(new Date(log.createdAt));
+          }
         }
       } catch (err) {
         console.warn('[AddFoodScreen] Erro ao carregar refeição para edição:', err);
@@ -264,7 +269,8 @@ export default function AddFoodScreen() {
           caloriesKcal,
           mealWindow,
           entryMethod: imageUri ? 'image' : undefined,
-          dateKey: existingDateKey,
+          dateKey: customDateTime ? toDateKey(customDateTime) : existingDateKey,
+          ingestedAt: customDateTime,
         });
       } else {
         await logsRepository.addFood({
@@ -273,7 +279,8 @@ export default function AddFoodScreen() {
           caloriesKcal,
           entryMethod: imageUri ? 'image' : 'manual',
           mealWindow,
-          dateKey: toDateKey(),
+          dateKey: customDateTime ? toDateKey(customDateTime) : toDateKey(),
+          ingestedAt: customDateTime,
         });
       }
 
@@ -354,6 +361,14 @@ export default function AddFoodScreen() {
 
           {/* Card de Índice de Equilíbrio Metabólico */}
           <MetabolicScoreCard score={proteinG > 30 ? 94 : 82} isPt={isPt} />
+
+          {/* Seletor Opcional de Data e Horário da Ingestão */}
+          <OptionalDateTimePicker
+            value={customDateTime}
+            onChange={setCustomDateTime}
+            isPt={isPt}
+            isEditMode={isEditMode}
+          />
 
           {/* Botão de Ação: Registrar / Salvar Alterações */}
           <SaveFoodButton

@@ -24,11 +24,14 @@ export interface AddWaterInput {
   amountMl: number;
   /** Default: hoje (fuso local). Permite lançar retroativamente. */
   dateKey?: string;
+  /** Data e horário opcional da ingestão. Se omitido, usa momento atual. */
+  ingestedAt?: Date | string | null;
 }
 
 export interface UpdateWaterInput {
   amountMl: number;
   dateKey?: string;
+  ingestedAt?: Date | string | null;
 }
 
 export interface AddFoodInput {
@@ -38,6 +41,8 @@ export interface AddFoodInput {
   entryMethod?: EntryMethod;
   mealWindow?: MealWindow;
   dateKey?: string;
+  /** Data e horário opcional da ingestão. Se omitido, usa momento atual. */
+  ingestedAt?: Date | string | null;
 }
 
 export interface UpdateFoodInput {
@@ -48,6 +53,7 @@ export interface UpdateFoodInput {
   imageUri?: string | null;
   entryMethod?: EntryMethod;
   dateKey?: string;
+  ingestedAt?: Date | string | null;
 }
 
 export interface HistoryFilters {
@@ -195,22 +201,32 @@ function buildProgress(consumed: number, goal: number): MacroProgress {
   };
 }
 
+function parseIngestedAt(ingestedAt?: Date | string | null): Date | null {
+  if (!ingestedAt) return null;
+  const d = typeof ingestedAt === 'string' ? new Date(ingestedAt) : ingestedAt;
+  return isNaN(d.getTime()) ? null : d;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Escrita
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function addWater(input: AddWaterInput): Promise<WaterLog> {
   assertPositiveInt(input.amountMl, 'amountMl');
-  const now = nowIso();
+  const now = new Date();
+  const customDate = parseIngestedAt(input.ingestedAt);
+  const effectiveDate = customDate ?? now;
+  const createdAt = effectiveDate.toISOString();
+  const dateKey = customDate ? toDateKey(customDate) : resolveDateKey(input.dateKey);
 
   const [row] = await db
     .insert(waterLogs)
     .values({
       id: generateId(),
       amountMl: input.amountMl,
-      dateKey: resolveDateKey(input.dateKey),
-      createdAt: now,
-      updatedAt: now,
+      dateKey,
+      createdAt,
+      updatedAt: now.toISOString(),
       isSynced: false,
     })
     .returning();
@@ -222,7 +238,11 @@ async function addFood(input: AddFoodInput): Promise<FoodLog> {
   assertNonEmpty(input.name, 'name');
   assertNonNegativeNumber(input.proteinG, 'proteinG');
   assertNonNegativeNumber(input.caloriesKcal, 'caloriesKcal');
-  const now = nowIso();
+  const now = new Date();
+  const customDate = parseIngestedAt(input.ingestedAt);
+  const effectiveDate = customDate ?? now;
+  const createdAt = effectiveDate.toISOString();
+  const dateKey = customDate ? toDateKey(customDate) : resolveDateKey(input.dateKey);
 
   const [row] = await db
     .insert(foodLogs)
@@ -233,9 +253,9 @@ async function addFood(input: AddFoodInput): Promise<FoodLog> {
       caloriesKcal: Math.round(input.caloriesKcal),
       entryMethod: input.entryMethod ?? 'manual',
       mealWindow: input.mealWindow ?? 'lunch',
-      dateKey: resolveDateKey(input.dateKey),
-      createdAt: now,
-      updatedAt: now,
+      dateKey,
+      createdAt,
+      updatedAt: now.toISOString(),
       isSynced: false,
     })
     .returning();
@@ -291,12 +311,17 @@ async function getFoodLogById(id: string): Promise<FoodLog | null> {
 async function updateWaterLog(id: string, input: UpdateWaterInput): Promise<WaterLog | null> {
   assertPositiveInt(input.amountMl, 'amountMl');
   const now = nowIso();
+  const customDate = parseIngestedAt(input.ingestedAt);
 
   const [row] = await db
     .update(waterLogs)
     .set({
       amountMl: input.amountMl,
-      ...(input.dateKey ? { dateKey: resolveDateKey(input.dateKey) } : {}),
+      ...(customDate
+        ? { createdAt: customDate.toISOString(), dateKey: toDateKey(customDate) }
+        : input.dateKey
+        ? { dateKey: resolveDateKey(input.dateKey) }
+        : {}),
       updatedAt: now,
       isSynced: false,
     })
@@ -311,6 +336,7 @@ async function updateFoodLog(id: string, input: UpdateFoodInput): Promise<FoodLo
   assertNonNegativeNumber(input.proteinG, 'proteinG');
   assertNonNegativeNumber(input.caloriesKcal, 'caloriesKcal');
   const now = nowIso();
+  const customDate = parseIngestedAt(input.ingestedAt);
 
   const [row] = await db
     .update(foodLogs)
@@ -320,7 +346,11 @@ async function updateFoodLog(id: string, input: UpdateFoodInput): Promise<FoodLo
       caloriesKcal: Math.round(input.caloriesKcal),
       ...(input.mealWindow ? { mealWindow: input.mealWindow } : {}),
       ...(input.entryMethod ? { entryMethod: input.entryMethod } : {}),
-      ...(input.dateKey ? { dateKey: resolveDateKey(input.dateKey) } : {}),
+      ...(customDate
+        ? { createdAt: customDate.toISOString(), dateKey: toDateKey(customDate) }
+        : input.dateKey
+        ? { dateKey: resolveDateKey(input.dateKey) }
+        : {}),
       updatedAt: now,
       isSynced: false,
     })

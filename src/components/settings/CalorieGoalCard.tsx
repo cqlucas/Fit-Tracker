@@ -1,5 +1,5 @@
 import { Flame, Info } from 'lucide-react-native';
-import React, { useMemo } from 'react';
+import React from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { Card } from '@/components/ui/Card';
@@ -18,14 +18,6 @@ export function CalorieGoalCard({
   isPt = false,
 }: CalorieGoalCardProps) {
   const numericValue = parseInt(value, 10) || 0;
-
-  // Classificação dinâmica do modo metabólico com base no valor inserido
-  const modeLabel = useMemo(() => {
-    if (numericValue === 0) return isPt ? 'Indefinido' : 'Undefined';
-    if (numericValue < 2000) return isPt ? 'Déficit' : 'Deficit';
-    if (numericValue <= 2400) return isPt ? 'Manutenção' : 'Maintenance';
-    return isPt ? 'Superávit' : 'Surplus';
-  }, [numericValue, isPt]);
 
   // Presets rápidos para seleção imediata
   const quickPresets = [1800, 2000, 2200, 2500];
@@ -70,15 +62,6 @@ export function CalorieGoalCard({
           />
           <Typography variant="labelMd" color={colors.onSurfaceVariant} style={styles.unitText}>
             {isPt ? 'KCAL / DIA' : 'KCAL / DAY'}
-          </Typography>
-        </View>
-
-        <View style={styles.statusColumn}>
-          <Typography variant="unitCaption" color={colors.outline} style={styles.statusLabel}>
-            {isPt ? 'MODO ESTIMADO' : 'CALCULATED MODE'}
-          </Typography>
-          <Typography variant="metricNumeralSm" color={colors.tertiary} style={styles.statusValue}>
-            {modeLabel}
           </Typography>
         </View>
       </View>
@@ -192,16 +175,6 @@ const styles = StyleSheet.create({
   },
   unitText: {
     letterSpacing: 0.6,
-  },
-  statusColumn: {
-    alignItems: 'flex-end',
-    gap: 2,
-  },
-  statusLabel: {
-    letterSpacing: 0.6,
-  },
-  statusValue: {
-    fontWeight: '700',
   },
   presetsRow: {
     flexDirection: 'row',

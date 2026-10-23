@@ -8,13 +8,14 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { OptionalDateTimePicker } from '@/components/ui/OptionalDateTimePicker';
+import { Typography } from '@/components/ui/Typography';
 import { HydrationImpactBar } from '@/components/water/HydrationImpactBar';
 import { QuickWaterPresets } from '@/components/water/QuickWaterPresets';
 import { SaveWaterButton } from '@/components/water/SaveWaterButton';
 import { WaterAmountCounter } from '@/components/water/WaterAmountCounter';
 import { WaterHeader } from '@/components/water/WaterHeader';
 import { WaterVesselVisual } from '@/components/water/WaterVesselVisual';
-import { Typography } from '@/components/ui/Typography';
 import { useLanguage } from '@/context/LanguageContext';
 import { goalsRepository } from '@/repositories/goals.repository';
 import { logsRepository } from '@/repositories/logs.repository';
@@ -30,6 +31,7 @@ export default function AddWaterScreen() {
   // Estados locais do formulário de água
   const [intakeVolume, setIntakeVolume] = useState(500);
   const [existingDateKey, setExistingDateKey] = useState<string | undefined>(undefined);
+  const [customDateTime, setCustomDateTime] = useState<Date | null>(null);
   const [originalLogAmount, setOriginalLogAmount] = useState<number | null>(null);
   const [baseTodayConsumed, setBaseTodayConsumed] = useState(0);
   const [dailyWaterGoal, setDailyWaterGoal] = useState(3000);
@@ -47,6 +49,9 @@ export default function AddWaterScreen() {
           setIntakeVolume(log.amountMl);
           setExistingDateKey(log.dateKey);
           setOriginalLogAmount(log.amountMl);
+          if (log.createdAt) {
+            setCustomDateTime(new Date(log.createdAt));
+          }
         }
       } catch (err) {
         console.warn('[AddWater] Erro ao carregar registro para edição:', err);
@@ -118,12 +123,14 @@ export default function AddWaterScreen() {
       if (isEditMode && id) {
         await logsRepository.updateWaterLog(id, {
           amountMl: intakeVolume,
-          dateKey: existingDateKey,
+          dateKey: customDateTime ? toDateKey(customDateTime) : existingDateKey,
+          ingestedAt: customDateTime,
         });
       } else {
         await logsRepository.addWater({
           amountMl: intakeVolume,
-          dateKey: toDateKey(),
+          dateKey: customDateTime ? toDateKey(customDateTime) : toDateKey(),
+          ingestedAt: customDateTime,
         });
       }
 
@@ -225,6 +232,14 @@ export default function AddWaterScreen() {
             isPt={isPt}
           />
         </View>
+
+        {/* Seletor Opcional de Data e Horário da Ingestão */}
+        <OptionalDateTimePicker
+          value={customDateTime}
+          onChange={setCustomDateTime}
+          isPt={isPt}
+          isEditMode={isEditMode}
+        />
 
         {/* Botão de Ação: Salvar Água */}
         <SaveWaterButton
