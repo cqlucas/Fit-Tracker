@@ -10,6 +10,10 @@ import { syncEngine } from '@/sync/sync.service';
 import { colors } from '@/theme/tokens';
 
 SplashScreen.preventAutoHideAsync();
+SplashScreen.setOptions({
+  duration: 400,
+  fade: true,
+});
 
 const customDarkTheme = {
   ...DarkTheme,
