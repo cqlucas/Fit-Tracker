@@ -30,6 +30,7 @@ export default function AddWaterScreen() {
   // Estados locais do formulário de água
   const [intakeVolume, setIntakeVolume] = useState(500);
   const [existingDateKey, setExistingDateKey] = useState<string | undefined>(undefined);
+  const [originalLogAmount, setOriginalLogAmount] = useState<number | null>(null);
   const [baseTodayConsumed, setBaseTodayConsumed] = useState(0);
   const [dailyWaterGoal, setDailyWaterGoal] = useState(3000);
   const [isLoading, setIsLoading] = useState(false);
@@ -45,6 +46,7 @@ export default function AddWaterScreen() {
         if (log && isMounted) {
           setIntakeVolume(log.amountMl);
           setExistingDateKey(log.dateKey);
+          setOriginalLogAmount(log.amountMl);
         }
       } catch (err) {
         console.warn('[AddWater] Erro ao carregar registro para edição:', err);
@@ -79,6 +81,15 @@ export default function AddWaterScreen() {
       isMounted = false;
     };
   }, []);
+
+  // Em modo de edição de um registro do dia de hoje, subtrai o valor original para evitar dupla contagem
+  const effectiveBaseConsumed = React.useMemo(() => {
+    const isLogFromToday = !existingDateKey || existingDateKey === toDateKey();
+    if (isEditMode && isLogFromToday && originalLogAmount !== null) {
+      return Math.max(0, baseTodayConsumed - originalLogAmount);
+    }
+    return baseTodayConsumed;
+  }, [isEditMode, existingDateKey, originalLogAmount, baseTodayConsumed]);
 
   const handleIncrement = () => {
     setIntakeVolume((prev) => Math.min(prev + 50, 2500));
@@ -184,7 +195,12 @@ export default function AddWaterScreen() {
           </View>
 
           {/* Garrafa / Vaso com nível de líquido animado em SVG */}
-          <WaterVesselVisual volume={intakeVolume} isPt={isPt} />
+          <WaterVesselVisual
+            volume={intakeVolume}
+            consumedToday={effectiveBaseConsumed}
+            waterGoal={dailyWaterGoal}
+            isPt={isPt}
+          />
 
           {/* Contador Numérico Gigante com botões +/- 50ml */}
           <WaterAmountCounter
@@ -203,7 +219,7 @@ export default function AddWaterScreen() {
 
           {/* Barra de Impacto Projetado na Hidratação Diária */}
           <HydrationImpactBar
-            baseConsumed={baseTodayConsumed}
+            baseConsumed={effectiveBaseConsumed}
             addedAmount={intakeVolume}
             goal={dailyWaterGoal}
             isPt={isPt}
