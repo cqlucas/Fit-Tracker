@@ -19,7 +19,7 @@ import { SaveFoodButton } from '@/components/food/SaveFoodButton';
 import { useLanguage } from '@/context/LanguageContext';
 import { MealWindow } from '@/db/schema';
 import { logsRepository } from '@/repositories/logs.repository';
-import { analyzeFoodImage } from '@/services/gemini.service';
+import { analyzeFoodWithAI } from '@/services/gemini.service';
 import { colors, spacing } from '@/theme/tokens';
 import { toDateKey } from '@/utils/date';
 
@@ -35,6 +35,9 @@ export default function AddFoodScreen() {
   const [caloriesKcal, setCaloriesKcal] = useState(0);
   const [mealWindow, setMealWindow] = useState<MealWindow>('lunch');
   const [imageUri, setImageUri] = useState<string | null>(null);
+  const [imageBase64, setImageBase64] = useState<string | null>(null);
+  const [imageMimeType, setImageMimeType] = useState<string>('image/jpeg');
+  const [aiContextText, setAiContextText] = useState('');
   const [existingDateKey, setExistingDateKey] = useState<string | undefined>(undefined);
 
   // Estados de carregamento e feedback
@@ -66,44 +69,15 @@ export default function AddFoodScreen() {
     };
   }, [id]);
 
-  // Processa a imagem capturada com o Gemini
-  const processSelectedImage = async (asset: ImagePicker.ImagePickerAsset) => {
+  // Apenas salva a imagem e o Base64 no estado local (SEM trigger automático de IA)
+  const handleSelectAsset = (asset: ImagePicker.ImagePickerAsset) => {
+    const sizeKb = asset.base64 ? (asset.base64.length / 1024).toFixed(1) : 'desconhecido';
+    console.log(
+      `[AddFoodScreen] 📸 Imagem carregada no formulário: URI=${asset.uri} (${asset.width}x${asset.height}, base64: ~${sizeKb} KB)`
+    );
     setImageUri(asset.uri);
-
-    if (!asset.base64) {
-      Alert.alert(
-        isPt ? 'Erro na Imagem' : 'Image Error',
-        isPt
-          ? 'Não foi possível carregar os dados em Base64 da imagem selecionada.'
-          : 'Could not load Base64 data from selected image.'
-      );
-      return;
-    }
-
-    setIsAnalyzingImage(true);
-
-    try {
-      const result = await analyzeFoodImage({
-        base64Image: asset.base64,
-        mimeType: asset.mimeType || 'image/jpeg',
-        language: isPt ? 'pt' : 'en',
-      });
-
-      setMealName(result.name);
-      setProteinG(result.protein_g);
-      setCaloriesKcal(result.calories_kcal);
-    } catch (err: any) {
-      console.warn('[AddFoodScreen] Falha na análise IA:', err);
-      Alert.alert(
-        isPt ? 'Análise com IA' : 'AI Analysis',
-        err?.message ||
-          (isPt
-            ? 'Não foi possível estimar os nutrientes da foto. Preencha os campos abaixo manualmente.'
-            : 'Failed to estimate meal nutrition. Please enter details below manually.')
-      );
-    } finally {
-      setIsAnalyzingImage(false);
-    }
+    setImageBase64(asset.base64 || null);
+    setImageMimeType(asset.mimeType || 'image/jpeg');
   };
 
   const takePhoto = async () => {
@@ -122,12 +96,12 @@ export default function AddFoodScreen() {
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ['images'],
         allowsEditing: true,
-        quality: 0.7,
+        quality: 0.5,
         base64: true,
       });
 
       if (!result.canceled && result.assets?.[0]) {
-        await processSelectedImage(result.assets[0]);
+        handleSelectAsset(result.assets[0]);
       }
     } catch (err) {
       console.error('[AddFoodScreen] Erro ao abrir câmera:', err);
@@ -151,12 +125,12 @@ export default function AddFoodScreen() {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsEditing: true,
-        quality: 0.7,
+        quality: 0.5,
         base64: true,
       });
 
       if (!result.canceled && result.assets?.[0]) {
-        await processSelectedImage(result.assets[0]);
+        handleSelectAsset(result.assets[0]);
       }
     } catch (err) {
       console.error('[AddFoodScreen] Erro ao abrir galeria:', err);
@@ -165,9 +139,9 @@ export default function AddFoodScreen() {
 
   const handlePickImage = () => {
     Alert.alert(
-      isPt ? 'Escanear Prato com IA' : 'Scan Meal with AI',
+      isPt ? 'Foto da Refeição' : 'Meal Photo',
       isPt
-        ? 'Escolha como deseja capturar a foto da sua refeição:'
+        ? 'Escolha como deseja registrar a imagem do seu prato:'
         : 'Choose how to capture your meal image:',
       [
         {
@@ -187,7 +161,63 @@ export default function AddFoodScreen() {
   };
 
   const handleRemoveImage = () => {
+    console.log('[AddFoodScreen] 🗑️ Foto removida do formulário.');
     setImageUri(null);
+    setImageBase64(null);
+  };
+
+  // Disparo Explícito da IA (Foto + Contexto, Apenas Foto ou Apenas Texto)
+  const handleAnalyzeWithAI = async () => {
+    if (isAnalyzingImage) {
+      console.log('[AddFoodScreen] ⏳ Análise já em andamento, ignorando clique duplicado.');
+      return;
+    }
+
+    const trimmedContext = aiContextText.trim();
+    console.log('[AddFoodScreen] 🟢 Botão "Analisar com IA" acionado pelo usuário.');
+    console.log(
+      `[AddFoodScreen] 📊 Entrada: Imagem=${imageBase64 ? 'SIM' : 'NÃO'} | Contexto="${trimmedContext}"`
+    );
+
+    if (!imageBase64 && !trimmedContext) {
+      Alert.alert(
+        isPt ? 'IA Nutricional' : 'AI Nutrition',
+        isPt
+          ? 'Tire uma foto ou descreva sua refeição no campo de texto para a IA analisar.'
+          : 'Please take a photo or describe your meal in the text field for AI analysis.'
+      );
+      return;
+    }
+
+    setIsAnalyzingImage(true);
+
+    try {
+      const result = await analyzeFoodWithAI({
+        base64Image: imageBase64,
+        mimeType: imageMimeType,
+        userContext: trimmedContext || undefined,
+        language: isPt ? 'pt' : 'en',
+      });
+
+      console.log(
+        `[AddFoodScreen] 📥 Preenchendo formulário: "${result.name}" (${result.protein_g}g proteína, ${result.calories_kcal} kcal)`
+      );
+
+      setMealName(result.name);
+      setProteinG(result.protein_g);
+      setCaloriesKcal(result.calories_kcal);
+    } catch (err: any) {
+      console.error('[AddFoodScreen] ❌ Falha na análise IA:', err?.message || err);
+      Alert.alert(
+        isPt ? 'Análise com IA' : 'AI Analysis',
+        err?.message ||
+          (isPt
+            ? 'Não foi possível estimar os nutrientes. Preencha os campos abaixo manualmente.'
+            : 'Failed to estimate meal nutrition. Please enter details below manually.')
+      );
+    } finally {
+      setIsAnalyzingImage(false);
+    }
   };
 
   const handleSave = async () => {
@@ -292,12 +322,15 @@ export default function AddFoodScreen() {
           {/* Cabeçalho superior com botão voltar */}
           <FoodHeader title={screenTitle} />
 
-          {/* Área Superior: Câmera / Escanear com IA Opcional */}
+          {/* Área de IA: Captura/Preview de Imagem + Contexto Adicional + Botão Analisar */}
           <FoodImagePickerCard
             imageUri={imageUri}
             isAnalyzing={isAnalyzingImage}
             onPickImage={handlePickImage}
             onRemoveImage={handleRemoveImage}
+            aiContextText={aiContextText}
+            onChangeAiContextText={setAiContextText}
+            onAnalyze={handleAnalyzeWithAI}
             isPt={isPt}
           />
 
