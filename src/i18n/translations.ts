@@ -68,6 +68,21 @@ export interface TranslationSchema {
     remindersSubtitle: string;
     syncStatus: string;
     readyToCommit: string;
+    syncStatusTitle: string;
+    syncStatusSynced: string;
+    syncStatusSyncing: string;
+    syncStatusOffline: string;
+    syncStatusLocalOnly: string;
+    syncStatusError: string;
+    syncDescSynced: string;
+    syncDescSyncing: string;
+    syncDescOffline: string;
+    syncDescLocalOnly: string;
+    syncDescError: string;
+    syncLastSynced: (time: string) => string;
+    syncTapToSync: string;
+    syncNever: string;
+    syncJustNow: string;
     saveButton: string;
     savedButton: string;
     saveFooter: string;
@@ -229,6 +244,21 @@ export const translations: Record<AppLanguage, TranslationSchema> = {
       remindersSubtitle: 'Intervalos dinâmicos sincronizados com o dia',
       syncStatus: 'Status do SQLite Local',
       readyToCommit: 'PRONTO PARA SALVAR',
+      syncStatusTitle: 'Sincronização em Nuvem (Supabase)',
+      syncStatusSynced: 'CONECTADO & SINCRONIZADO',
+      syncStatusSyncing: 'SINCRONIZANDO...',
+      syncStatusOffline: 'OFFLINE (SALVO NO DISPOSITIVO)',
+      syncStatusLocalOnly: 'MODO 100% LOCAL (SEM SUPABASE)',
+      syncStatusError: 'ERRO NA SINCRONIZAÇÃO',
+      syncDescSynced: 'Banco de dados sincronizado em tempo real.',
+      syncDescSyncing: 'Enviando e recebendo dados da nuvem...',
+      syncDescOffline: 'Alterações salvas localmente. Sincroniza ao reconectar.',
+      syncDescLocalOnly: 'Dados salvos com segurança no SQLite local deste aparelho.',
+      syncDescError: 'Falha na comunicação com o Supabase. Toque para tentar novamente.',
+      syncLastSynced: (time: string) => `Última sincronização: ${time}`,
+      syncTapToSync: 'Toque para sincronizar agora',
+      syncNever: 'Pendente',
+      syncJustNow: 'Agora mesmo',
       saveButton: 'Salvar Metas Diárias',
       savedButton: 'Metas Sincronizadas!',
       saveFooter: 'As alterações recalculam instantaneamente os gráficos de rosca e o progresso.',
@@ -388,6 +418,21 @@ export const translations: Record<AppLanguage, TranslationSchema> = {
       remindersSubtitle: 'Dynamic intervals synced with activity & climate',
       syncStatus: 'Telemetry Sync Status',
       readyToCommit: 'READY TO COMMIT',
+      syncStatusTitle: 'Cloud Sync (Supabase)',
+      syncStatusSynced: 'CONNECTED & SYNCED',
+      syncStatusSyncing: 'SYNCING...',
+      syncStatusOffline: 'OFFLINE (SAVED LOCALLY)',
+      syncStatusLocalOnly: '100% LOCAL MODE (NO SUPABASE)',
+      syncStatusError: 'SYNC ERROR',
+      syncDescSynced: 'Database synchronized in real-time.',
+      syncDescSyncing: 'Sending and receiving cloud updates...',
+      syncDescOffline: 'Changes saved locally. Syncs when reconnected.',
+      syncDescLocalOnly: 'Data securely stored in local SQLite on this device.',
+      syncDescError: 'Communication with Supabase failed. Tap to retry.',
+      syncLastSynced: (time: string) => `Last synced: ${time}`,
+      syncTapToSync: 'Tap to sync now',
+      syncNever: 'Pending',
+      syncJustNow: 'Just now',
       saveButton: 'Save Daily Goals',
       savedButton: 'Goals Synchronized!',
       saveFooter: 'Changes reflect instantly across widgets, companions, and ring charts.',

@@ -305,7 +305,14 @@ const emptyCounts = (): Record<SyncTableName, number> =>
 // Engine
 // ─────────────────────────────────────────────────────────────────────────────
 
-type Listener = (state: { isSyncing: boolean; lastResult: SyncResult | null }) => void;
+export interface SyncState {
+  isSyncing: boolean;
+  isOnline: boolean;
+  isEnabled: boolean;
+  lastResult: SyncResult | null;
+}
+
+export type Listener = (state: SyncState) => void;
 
 class SyncEngine {
   private inFlight: Promise<SyncResult> | null = null;
@@ -319,10 +326,24 @@ class SyncEngine {
     return isSupabaseConfigured;
   }
 
+  get online() {
+    return this.isOnline;
+  }
+
+  getState(): SyncState {
+    return {
+      isSyncing: !!this.inFlight,
+      isOnline: this.isOnline,
+      isEnabled: this.isEnabled,
+      lastResult: this.lastResult,
+    };
+  }
+
   /** Idempotente. Chame uma vez no root layout. */
   start(): void {
     if (!this.isEnabled) {
       if (__DEV__) console.info('[sync] Supabase não configurado — rodando 100% offline.');
+      this.emit();
       return;
     }
     if (this.subscriptions.length > 0) return;
@@ -330,6 +351,7 @@ class SyncEngine {
     const netSub = NetInfo.addEventListener((state) => {
       const wasOnline = this.isOnline;
       this.isOnline = !!state.isConnected && state.isInternetReachable !== false;
+      this.emit();
       if (this.isOnline && !wasOnline) this.requestSync(0);
     });
 
@@ -350,6 +372,7 @@ class SyncEngine {
 
     NetInfo.fetch().then((state) => {
       this.isOnline = !!state.isConnected && state.isInternetReachable !== false;
+      this.emit();
       this.requestSync(0);
     });
   }
@@ -386,7 +409,7 @@ class SyncEngine {
 
   subscribe(listener: Listener): () => void {
     this.listeners.add(listener);
-    listener({ isSyncing: !!this.inFlight, lastResult: this.lastResult });
+    listener(this.getState());
     return () => this.listeners.delete(listener);
   }
 
@@ -422,7 +445,7 @@ class SyncEngine {
   }
 
   private emit(): void {
-    const state = { isSyncing: !!this.inFlight, lastResult: this.lastResult };
+    const state = this.getState();
     this.listeners.forEach((l) => l(state));
   }
 }
