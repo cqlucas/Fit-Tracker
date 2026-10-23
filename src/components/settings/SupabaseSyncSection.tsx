@@ -336,9 +336,6 @@ export function SupabaseSyncSection({
             <Typography variant="labelSm" color={colors.onSurface} style={styles.title}>
               {isPt ? 'Nuvem & Sincronização (Supabase)' : 'Cloud & Sync (Supabase)'}
             </Typography>
-            <Typography variant="unitCaption" color={colors.onSurfaceVariant}>
-              {isPt ? 'ARQUITETURA BYOK • PRIVACIDADE TOTAL' : 'BYOK ARCHITECTURE • 100% PRIVATE'}
-            </Typography>
           </View>
         </View>
 

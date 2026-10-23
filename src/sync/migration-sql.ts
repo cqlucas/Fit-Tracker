@@ -94,4 +94,12 @@ CREATE POLICY "Allow all access" ON public.water_logs FOR ALL USING (true) WITH 
 
 DROP POLICY IF EXISTS "Allow all access" ON public.food_logs;
 CREATE POLICY "Allow all access" ON public.food_logs FOR ALL USING (true) WITH CHECK (true);
+
+-- 7. Atualização de Bancos Já Existentes (Garante novas colunas)
+ALTER TABLE public.user_goals ADD COLUMN IF NOT EXISTS preferred_ai_provider TEXT NOT NULL DEFAULT 'gemini';
+ALTER TABLE public.food_logs ADD COLUMN IF NOT EXISTS image_uri TEXT;
+ALTER TABLE public.food_logs ADD COLUMN IF NOT EXISTS meal_window TEXT NOT NULL DEFAULT 'lunch';
+
+-- 8. Notifica o PostgREST para recarregar o Schema Cache imediatamente
+NOTIFY pgrst, 'reload schema';
 `;

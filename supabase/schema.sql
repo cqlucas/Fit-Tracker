@@ -1,83 +1,117 @@
 -- ============================================================================
--- Fit-Tracker — schema remoto (Supabase / Postgres)
--- Rode no SQL Editor do Supabase. Espelha o SQLite local, SEM `is_synced`,
--- e COM `server_updated_at` (relógio do servidor, usado como cursor do pull).
+-- Fit-Tracker — Schema Remoto (Supabase / Postgres)
 -- ============================================================================
+-- Cole este script completo no SQL Editor do seu projeto Supabase e clique em "Run".
+-- Ele é 100% idempotente: cria ou atualiza as tabelas, colunas, triggers e políticas RLS.
 
-create or replace function public.set_server_updated_at()
-returns trigger language plpgsql as $$
-begin
-  new.server_updated_at := now();
-  return new;
-end;
-$$;
+-- 1. Função de Timestamp do Servidor
+CREATE OR REPLACE FUNCTION public.set_server_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.server_updated_at = now();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
 
--- user_goals ------------------------------------------------------------------
-create table if not exists public.user_goals (
-  id                text primary key default 'default_user',
-  protein_goal      integer not null default 160,
-  water_goal        integer not null default 3000,
-  calories_goal     integer not null default 2200,
-  language          text not null default 'pt' check (language in ('pt', 'en')),
-  updated_at        timestamptz not null default now(),
-  server_updated_at timestamptz not null default now()
+-- 2. Tabela de Metas do Usuário
+CREATE TABLE IF NOT EXISTS public.user_goals (
+  id                    TEXT PRIMARY KEY DEFAULT 'default_user',
+  protein_goal          INTEGER NOT NULL DEFAULT 160,
+  water_goal            INTEGER NOT NULL DEFAULT 3000,
+  calories_goal         INTEGER NOT NULL DEFAULT 2200,
+  language              TEXT NOT NULL DEFAULT 'pt',
+  preferred_ai_provider TEXT NOT NULL DEFAULT 'gemini',
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+  server_updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- water_logs ------------------------------------------------------------------
-create table if not exists public.water_logs (
-  id                uuid primary key,
-  amount_ml         integer not null check (amount_ml > 0),
-  date_key          date not null,
-  created_at        timestamptz not null default now(),
-  updated_at        timestamptz not null default now(),
-  deleted_at        timestamptz,
-  server_updated_at timestamptz not null default now()
+-- 3. Tabela de Registros de Água
+CREATE TABLE IF NOT EXISTS public.water_logs (
+  id                TEXT PRIMARY KEY,
+  amount_ml         INTEGER NOT NULL CHECK (amount_ml > 0),
+  date_key          TEXT NOT NULL,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at        TIMESTAMPTZ,
+  server_updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- food_logs -------------------------------------------------------------------
-create table if not exists public.food_logs (
-  id                uuid primary key,
-  name              text not null,
-  protein_g         real not null check (protein_g >= 0),
-  calories_kcal     integer not null check (calories_kcal >= 0),
-  entry_method      text not null default 'manual' check (entry_method in ('manual', 'image')),
-  meal_window       text not null default 'lunch' check (meal_window in ('breakfast', 'lunch', 'dinner', 'snack')),
-  date_key          date not null,
-  created_at        timestamptz not null default now(),
-  updated_at        timestamptz not null default now(),
-  deleted_at        timestamptz,
-  server_updated_at timestamptz not null default now()
+-- 4. Tabela de Registros de Refeições
+CREATE TABLE IF NOT EXISTS public.food_logs (
+  id                TEXT PRIMARY KEY,
+  name              TEXT NOT NULL,
+  protein_g         REAL NOT NULL CHECK (protein_g >= 0),
+  calories_kcal     INTEGER NOT NULL CHECK (calories_kcal >= 0),
+  entry_method      TEXT NOT NULL DEFAULT 'manual' CHECK (entry_method IN ('manual', 'image')),
+  meal_window       TEXT NOT NULL DEFAULT 'lunch' CHECK (meal_window IN ('breakfast', 'lunch', 'dinner', 'snack')),
+  image_uri         TEXT,
+  date_key          TEXT NOT NULL,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at        TIMESTAMPTZ,
+  server_updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Triggers + índices de cursor ------------------------------------------------
-do $$
-declare t text;
-begin
-  foreach t in array array['user_goals', 'water_logs', 'food_logs'] loop
-    execute format('drop trigger if exists trg_%1$s_server_updated_at on public.%1$s', t);
-    execute format(
-      'create trigger trg_%1$s_server_updated_at before insert or update on public.%1$s
-       for each row execute function public.set_server_updated_at()', t);
-    execute format(
-      'create index if not exists idx_%1$s_server_updated_at on public.%1$s (server_updated_at)', t);
-  end loop;
-end $$;
+-- 5. Atualização de Bancos Já Criados (Garante adição de novas colunas)
+ALTER TABLE public.user_goals ADD COLUMN IF NOT EXISTS preferred_ai_provider TEXT NOT NULL DEFAULT 'gemini';
+ALTER TABLE public.food_logs ADD COLUMN IF NOT EXISTS image_uri TEXT;
+ALTER TABLE public.food_logs ADD COLUMN IF NOT EXISTS meal_window TEXT NOT NULL DEFAULT 'lunch';
 
-create index if not exists idx_water_logs_date_key on public.water_logs (date_key);
-create index if not exists idx_food_logs_date_key  on public.food_logs  (date_key);
+-- Se as colunas de ID ou date_key eram de tipos restritos em versões anteriores
+DO $$
+BEGIN
+  BEGIN
+    ALTER TABLE public.water_logs ALTER COLUMN id TYPE TEXT;
+  EXCEPTION WHEN others THEN NULL;
+  END;
+  BEGIN
+    ALTER TABLE public.food_logs ALTER COLUMN id TYPE TEXT;
+  EXCEPTION WHEN others THEN NULL;
+  END;
+  BEGIN
+    ALTER TABLE public.water_logs ALTER COLUMN date_key TYPE TEXT;
+  EXCEPTION WHEN others THEN NULL;
+  END;
+  BEGIN
+    ALTER TABLE public.food_logs ALTER COLUMN date_key TYPE TEXT;
+  EXCEPTION WHEN others THEN NULL;
+  END;
+END $$;
 
--- RLS -------------------------------------------------------------------------
--- ⚠️ Políticas para app pessoal de 1 usuário (permite 'anon' e 'authenticated').
--- Se no futuro virar multiusuário com login: adicione `user_id uuid default auth.uid()`
--- e restrinja para `user_id = auth.uid()`.
-alter table public.user_goals enable row level security;
-alter table public.water_logs enable row level security;
-alter table public.food_logs  enable row level security;
+-- 6. Triggers e Índices de Cursor de Sincronização
+DO $$
+DECLARE t TEXT;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['user_goals', 'water_logs', 'food_logs'] LOOP
+    EXECUTE format('DROP TRIGGER IF EXISTS trg_%1$s_server_updated_at ON public.%1$s', t);
+    EXECUTE format(
+      'CREATE TRIGGER trg_%1$s_server_updated_at BEFORE INSERT OR UPDATE ON public.%1$s
+       FOR EACH ROW EXECUTE FUNCTION public.set_server_updated_at()', t);
+    EXECUTE format(
+      'CREATE INDEX IF NOT EXISTS idx_%1$s_server_updated_at ON public.%1$s (server_updated_at)', t);
+  END LOOP;
+END $$;
 
-drop policy if exists "owner_all" on public.user_goals;
-drop policy if exists "owner_all" on public.water_logs;
-drop policy if exists "owner_all" on public.food_logs;
+CREATE INDEX IF NOT EXISTS idx_water_logs_date_key ON public.water_logs (date_key);
+CREATE INDEX IF NOT EXISTS idx_food_logs_date_key  ON public.food_logs (date_key);
 
-create policy "owner_all" on public.user_goals for all to anon, authenticated using (true) with check (true);
-create policy "owner_all" on public.water_logs for all to anon, authenticated using (true) with check (true);
-create policy "owner_all" on public.food_logs  for all to anon, authenticated using (true) with check (true);
+-- 7. Row Level Security (RLS) para anon_key
+ALTER TABLE public.user_goals ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.water_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.food_logs  ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "owner_all" ON public.user_goals;
+DROP POLICY IF EXISTS "owner_all" ON public.water_logs;
+DROP POLICY IF EXISTS "owner_all" ON public.food_logs;
+
+DROP POLICY IF EXISTS "Allow all access" ON public.user_goals;
+CREATE POLICY "Allow all access" ON public.user_goals FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all access" ON public.water_logs;
+CREATE POLICY "Allow all access" ON public.water_logs FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all access" ON public.food_logs;
+CREATE POLICY "Allow all access" ON public.food_logs FOR ALL USING (true) WITH CHECK (true);
+
+-- 8. Recarrega o Schema Cache do PostgREST imediatamente
+NOTIFY pgrst, 'reload schema';
