@@ -11,8 +11,21 @@
  */
 
 import { goalsRepository } from '@/repositories/goals.repository';
+import { getApiKeyForService } from './api-keys.service';
 
 export type PreferredAiProvider = 'gemini' | 'groq';
+
+export class MissingApiKeysError extends Error {
+  code = 'MISSING_API_KEYS';
+  constructor(language: 'pt' | 'en' = 'pt') {
+    super(
+      language === 'pt'
+        ? 'Nenhuma chave de IA configurada. Vincule sua chave do Google Gemini ou Groq na tela de Configurações para utilizar a análise de refeições.'
+        : 'No AI API key configured. Link your Google Gemini or Groq key in Settings to use meal analysis.'
+    );
+    this.name = 'MissingApiKeysError';
+  }
+}
 
 export interface FoodAnalysisResult {
   name: string;
@@ -207,17 +220,18 @@ async function discoverAvailableGeminiModels(apiKey: string): Promise<string[]> 
 }
 
 export async function analyzeFoodWithGemini(
-  options: AnalyzeFoodAIOptions
+  options: AnalyzeFoodAIOptions,
+  explicitApiKey?: string
 ): Promise<FoodAnalysisResult> {
   const startTime = Date.now();
-  const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
+  const apiKey = explicitApiKey || (await getApiKeyForService('gemini'));
   const language = options.language ?? 'pt';
 
-  if (!apiKey || apiKey === 'sua_chave_do_google_ai_studio_aqui') {
+  if (!apiKey) {
     throw new Error(
       language === 'pt'
-        ? 'Chave da API do Google Gemini não configurada. Defina EXPO_PUBLIC_GEMINI_API_KEY no arquivo .env.'
-        : 'Google Gemini API key is not configured. Set EXPO_PUBLIC_GEMINI_API_KEY in your .env file.'
+        ? 'Chave da API do Google Gemini não vinculada. Configure nas Configurações.'
+        : 'Google Gemini API key not linked. Configure it in Settings.'
     );
   }
 
@@ -376,17 +390,18 @@ async function discoverAvailableGroqModels(apiKey: string): Promise<string[]> {
 }
 
 export async function analyzeFoodWithGroq(
-  options: AnalyzeFoodAIOptions
+  options: AnalyzeFoodAIOptions,
+  explicitApiKey?: string
 ): Promise<FoodAnalysisResult> {
   const startTime = Date.now();
-  const apiKey = process.env.EXPO_PUBLIC_GROQ_API_KEY;
+  const apiKey = explicitApiKey || (await getApiKeyForService('groq'));
   const language = options.language ?? 'pt';
 
-  if (!apiKey || apiKey === 'sua_chave_da_groq_cloud_aqui') {
+  if (!apiKey) {
     throw new Error(
       language === 'pt'
-        ? 'Chave da API da Groq não configurada. Defina EXPO_PUBLIC_GROQ_API_KEY no arquivo .env.'
-        : 'Groq API key is not configured. Set EXPO_PUBLIC_GROQ_API_KEY in your .env file.'
+        ? 'Chave da API da Groq não vinculada. Configure nas Configurações.'
+        : 'Groq API key not linked. Configure it in Settings.'
     );
   }
 
@@ -514,8 +529,35 @@ export async function analyzeFoodWithAI(
   options: AnalyzeFoodAIOptions
 ): Promise<FoodAnalysisResult> {
   const orchestratorStart = Date.now();
+  const language = options.language ?? 'pt';
 
-  // Determina a preferência do usuário (via opções ou busca no banco SQLite)
+  // Busca as chaves em tempo real via SecureStore (com fallback para .env em dev)
+  const [geminiKey, groqKey] = await Promise.all([
+    getApiKeyForService('gemini'),
+    getApiKeyForService('groq'),
+  ]);
+
+  const hasGemini = Boolean(geminiKey && geminiKey.trim().length > 0);
+  const hasGroq = Boolean(groqKey && groqKey.trim().length > 0);
+
+  // 1. Caso nenhuma das duas chaves esteja vinculada: lança erro específico
+  if (!hasGemini && !hasGroq) {
+    throw new MissingApiKeysError(language);
+  }
+
+  // 2. Caso apenas Gemini esteja configurado: executa diretamente sem tentar Groq
+  if (hasGemini && !hasGroq) {
+    console.log('[AI Orchestrator] 🚀 Executando exclusivamente via Google Gemini (única chave vinculada)');
+    return analyzeFoodWithGemini(options, geminiKey!);
+  }
+
+  // 3. Caso apenas Groq esteja configurado: executa diretamente sem tentar Gemini
+  if (!hasGemini && hasGroq) {
+    console.log('[AI Orchestrator] 🚀 Executando exclusivamente via Groq Cloud (única chave vinculada)');
+    return analyzeFoodWithGroq(options, groqKey!);
+  }
+
+  // 4. Caso ambas as chaves estejam configuradas: respeita preferência e faz fallback automático
   let preferred: PreferredAiProvider = options.preferredProvider || 'gemini';
   if (!options.preferredProvider) {
     try {
@@ -526,37 +568,46 @@ export async function analyzeFoodWithAI(
     }
   }
 
-  // Fila bidirecional ordenada pela preferência
-  const providersOrder: PreferredAiProvider[] =
-    preferred === 'groq' ? ['groq', 'gemini'] : ['gemini', 'groq'];
+  const providersOrder: { provider: PreferredAiProvider; key: string }[] =
+    preferred === 'groq'
+      ? [
+          { provider: 'groq', key: groqKey! },
+          { provider: 'gemini', key: geminiKey! },
+        ]
+      : [
+          { provider: 'gemini', key: geminiKey! },
+          { provider: 'groq', key: groqKey! },
+        ];
 
   console.log('═══════════════════════════════════════════════════════════════');
   console.log(
-    `[AI Orchestrator] 🚀 Iniciando análise nutricional (Preferência do Usuário: ${preferred.toUpperCase()})`
+    `[AI Orchestrator] 🚀 Ambas chaves ativas. Preferência: ${preferred.toUpperCase()}`
   );
-  console.log(`[AI Orchestrator] 🔄 Ordem de Fallback: [${providersOrder.join(' ➔ ')}]`);
+  console.log(
+    `[AI Orchestrator] 🔄 Ordem de Fallback: [${providersOrder.map((p) => p.provider).join(' ➔ ')}]`
+  );
 
   let primaryError: Error | null = null;
 
   for (let i = 0; i < providersOrder.length; i++) {
-    const provider = providersOrder[i];
+    const { provider, key } = providersOrder[i];
     const isFallback = i > 0;
 
     if (isFallback) {
       console.warn(
-        `[AI Orchestrator] ⚠️ ACIONANDO FALLBACK IMEDIATO: Provedor principal "${providersOrder[0]}" falhou. Executando "${provider}"...`
+        `[AI Orchestrator] ⚠️ ACIONANDO FALLBACK IMEDIATO: Provedor principal "${providersOrder[0].provider}" falhou. Executando "${provider}"...`
       );
     }
 
     try {
       if (provider === 'gemini') {
-        const result = await analyzeFoodWithGemini(options);
+        const result = await analyzeFoodWithGemini(options, key);
         const totalDuration = Date.now() - orchestratorStart;
         console.log(`[AI Orchestrator] 🏁 Concluído com sucesso via Google Gemini em ${totalDuration}ms!`);
         console.log('═══════════════════════════════════════════════════════════════');
         return result;
       } else {
-        const result = await analyzeFoodWithGroq(options);
+        const result = await analyzeFoodWithGroq(options, key);
         const totalDuration = Date.now() - orchestratorStart;
         console.log(`[AI Orchestrator] 🏁 Concluído com sucesso via Groq Cloud em ${totalDuration}ms!`);
         console.log('═══════════════════════════════════════════════════════════════');
@@ -575,7 +626,7 @@ export async function analyzeFoodWithAI(
   console.log('═══════════════════════════════════════════════════════════════');
 
   throw new Error(
-    options.language === 'pt'
+    language === 'pt'
       ? `Não foi possível analisar a refeição após tentar Gemini e Groq. Detalhes: ${primaryError?.message || 'Falha na conexão com as IAs.'}`
       : `Failed to analyze meal after attempting both Gemini and Groq. Details: ${primaryError?.message || 'AI connection failure.'}`
   );

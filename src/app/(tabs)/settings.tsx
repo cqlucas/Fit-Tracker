@@ -10,6 +10,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AiProviderSelectorCard } from '@/components/settings/AiProviderSelectorCard';
+import { ApiKeysSection } from '@/components/settings/ApiKeysSection';
 import { CalorieGoalCard } from '@/components/settings/CalorieGoalCard';
 import { IntroBanner } from '@/components/settings/IntroBanner';
 import { LanguageSelectorCard } from '@/components/settings/LanguageSelectorCard';
@@ -21,6 +22,7 @@ import { WaterGoalCard } from '@/components/settings/WaterGoalCard';
 import { useLanguage } from '@/context/LanguageContext';
 import { type PreferredAiProvider } from '@/db/schema';
 import { DEFAULT_GOALS, goalsRepository } from '@/repositories/goals.repository';
+import { apiKeysService, type ApiKeysStatus } from '@/services/api-keys.service';
 import { colors, spacing } from '@/theme/tokens';
 
 export default function SettingsScreen() {
@@ -34,13 +36,17 @@ export default function SettingsScreen() {
   const [caloriesInput, setCaloriesInput] = useState('2200');
   const [language, setLanguage] = useState<'pt' | 'en'>(currentGlobalLang);
   const [aiProvider, setAiProvider] = useState<PreferredAiProvider>('gemini');
+  const [apiKeysStatus, setApiKeysStatus] = useState<ApiKeysStatus>({
+    hasGeminiKey: false,
+    hasGroqKey: false,
+  });
 
   const [isSaving, setIsSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
 
   const isPt = language === 'pt';
 
-  // Carrega as metas do banco local SQLite ao focar na tela
+  // Carrega as metas do banco local SQLite e status das chaves ao focar na tela
   useFocusEffect(
     useCallback(() => {
       let isMounted = true;
@@ -59,6 +65,17 @@ export default function SettingsScreen() {
         })
         .catch((err) => {
           if (__DEV__) console.warn('[SettingsScreen] Erro ao carregar metas:', err);
+        });
+
+      apiKeysService
+        .getApiKeysStatus()
+        .then((keys) => {
+          if (isMounted) {
+            setApiKeysStatus(keys);
+          }
+        })
+        .catch((err) => {
+          if (__DEV__) console.warn('[SettingsScreen] Erro ao carregar chaves:', err);
         });
 
       return () => {
@@ -189,12 +206,20 @@ export default function SettingsScreen() {
             onSelectLanguage={handleSelectLanguage}
           />
 
-          {/* 5. Seletor de Provedor de IA: Alternar entre Gemini e Groq */}
-          <AiProviderSelectorCard
-            provider={aiProvider}
-            onSelectProvider={handleSelectAiProvider}
+          {/* 5. Chaves de IA (BYOK): Gerenciamento Seguro com SecureStore */}
+          <ApiKeysSection
             isPt={isPt}
+            onKeysChanged={setApiKeysStatus}
           />
+
+          {/* 6. Seletor de Provedor de IA: SÓ APARECE SE AMBAS AS CHAVES ESTIVEREM VINCULADAS */}
+          {apiKeysStatus.hasGeminiKey && apiKeysStatus.hasGroqKey && (
+            <AiProviderSelectorCard
+              provider={aiProvider}
+              onSelectProvider={handleSelectAiProvider}
+              isPt={isPt}
+            />
+          )}
 
           {/* Status de Sincronização Telemetry */}
           <StatusSyncCard isPt={isPt} />

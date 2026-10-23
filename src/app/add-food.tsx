@@ -213,13 +213,27 @@ export default function AddFoodScreen() {
       setCaloriesKcal(result.calories_kcal);
     } catch (err: any) {
       console.error('[AddFoodScreen] ❌ Falha na análise IA:', err?.message || err);
-      Alert.alert(
-        isPt ? 'Análise com IA' : 'AI Analysis',
-        err?.message ||
-          (isPt
-            ? 'Não foi possível estimar os nutrientes. Preencha os campos abaixo manualmente.'
-            : 'Failed to estimate meal nutrition. Please enter details below manually.')
-      );
+      if (err?.code === 'MISSING_API_KEYS' || err?.name === 'MissingApiKeysError') {
+        Alert.alert(
+          isPt ? 'Chave de IA Necessária' : 'AI API Key Required',
+          err.message,
+          [
+            { text: isPt ? 'Agora Não' : 'Not Now', style: 'cancel' },
+            {
+              text: isPt ? 'Configurar Chave' : 'Set Up Key',
+              onPress: () => router.push('/(tabs)/settings'),
+            },
+          ]
+        );
+      } else {
+        Alert.alert(
+          isPt ? 'Análise com IA' : 'AI Analysis',
+          err?.message ||
+            (isPt
+              ? 'Não foi possível estimar os nutrientes. Preencha os campos abaixo manualmente.'
+              : 'Failed to estimate meal nutrition. Please enter details below manually.')
+        );
+      }
     } finally {
       setIsAnalyzingImage(false);
     }
