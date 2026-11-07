@@ -30,16 +30,19 @@ export function DonutChartCard({
   leftLabel,
   goalLabel,
 }: DonutChartCardProps) {
-  const { t } = useLanguage();
+  const { t, isPt } = useLanguage();
   const { width: windowWidth } = useWindowDimensions();
 
-  const percent = goal > 0 ? Math.min(Math.round((current / goal) * 100), 100) : 0;
-  const rawRemaining = Math.max(goal - current, 0);
+  const percent =
+    goal > 0 ? Math.min(Math.round((current / goal) * 100), 100) : 0;
+  const rawRemaining = current;
 
-  const resolvedLeftLabel = leftLabel ?? t.home.left;
+  const resolvedLeftLabel = leftLabel ?? (isPt ? 'registrados' : 'logged');
   const resolvedGoalLabel = goalLabel ?? t.home.goal;
 
-  const displayRemaining = formatValue ? formatValue(rawRemaining) : String(rawRemaining);
+  const displayRemaining = formatValue
+    ? formatValue(rawRemaining)
+    : String(rawRemaining);
   const displayCurrent = formatValue ? formatValue(current) : String(current);
   const displayGoal = formatValue ? formatValue(goal) : String(goal);
 
@@ -47,7 +50,10 @@ export function DonutChartCard({
   // Layout da Home: 2 cards lado a lado com padding lateral de 16 cada lado (32) e gap de 12
   // Padding interno de cada card: 16 de cada lado (32)
   const availableCardWidth = (windowWidth - 44) / 2 - 32;
-  const size = Math.min(Math.max(Math.floor(availableCardWidth * 0.88), 108), 130);
+  const size = Math.min(
+    Math.max(Math.floor(availableCardWidth * 0.88), 108),
+    130,
+  );
 
   // SVG Donut geometry (base 100x100 no viewBox)
   const strokeWidthBase = 9;
@@ -71,7 +77,11 @@ export function DonutChartCard({
           </Typography>
         </View>
         <View style={[styles.percentBadge, { backgroundColor: `${color}20` }]}>
-          <Typography variant="unitCaption" color={color} style={styles.percentText}>
+          <Typography
+            variant="unitCaption"
+            color={color}
+            style={styles.percentText}
+          >
             {percent}%
           </Typography>
         </View>
@@ -79,7 +89,12 @@ export function DonutChartCard({
 
       {/* Gráfico Circular de Rosca */}
       <View style={[styles.donutContainer, { width: size, height: size }]}>
-        <Svg width={size} height={size} viewBox="0 0 100 100" style={styles.svg}>
+        <Svg
+          width={size}
+          height={size}
+          viewBox="0 0 100 100"
+          style={styles.svg}
+        >
           {/* Trilha de fundo */}
           <Circle
             cx="50"
@@ -113,7 +128,8 @@ export function DonutChartCard({
               numberOfLines={1}
               adjustsFontSizeToFit
               minimumFontScale={0.65}
-              style={styles.remainingNumber}>
+              style={styles.remainingNumber}
+            >
               {displayRemaining}
             </Typography>
 
@@ -124,7 +140,8 @@ export function DonutChartCard({
               center
               numberOfLines={1}
               adjustsFontSizeToFit
-              style={styles.unitAndLeftLabel}>
+              style={styles.unitAndLeftLabel}
+            >
               {unit} {resolvedLeftLabel}
             </Typography>
           </View>
@@ -133,11 +150,22 @@ export function DonutChartCard({
 
       {/* Meta e Consumo Atual */}
       <View style={styles.footerPill}>
-        <Typography variant="labelSm" color={colors.onSurfaceVariant} center numberOfLines={1}>
-          <Typography variant="labelSm" color={colors.onSurface} style={styles.bold}>
-            {displayCurrent}{unit}
-          </Typography>
-          {' '}/ {displayGoal}{unit} {resolvedGoalLabel}
+        <Typography
+          variant="labelSm"
+          color={colors.onSurfaceVariant}
+          center
+          numberOfLines={1}
+        >
+          <Typography
+            variant="labelSm"
+            color={colors.onSurface}
+            style={styles.bold}
+          >
+            {displayCurrent}
+            {unit}
+          </Typography>{' '}
+          / {displayGoal}
+          {unit} {resolvedGoalLabel}
         </Typography>
       </View>
     </Card>

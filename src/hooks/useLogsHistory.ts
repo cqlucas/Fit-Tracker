@@ -1,15 +1,13 @@
 import { useFocusEffect } from 'expo-router';
 import { addDatabaseChangeListener } from 'expo-sqlite';
 import { useCallback, useEffect, useRef, useState } from 'react';
-
 import { useLanguage } from '@/context/LanguageContext';
+import { expoDb, getDatabaseScope } from '@/db/client';
 import {
   logsRepository,
-  type HistoryFilters,
   type UnifiedLogItem,
 } from '@/repositories/logs.repository';
-import { addDays, fromDateKey, toDateKey } from '@/utils/date';
-
+import { addDays, toDateKey } from '@/utils/date';
 export interface HistorySection {
   dateKey: string;
   title: string;
@@ -17,204 +15,172 @@ export interface HistorySection {
   totalProteinG: number;
   totalCaloriesKcal: number;
   totalWaterMl: number;
+  partial: boolean;
 }
-
 export function useLogsHistory() {
   const { isPt } = useLanguage();
-
-  const [type, setType] = useState<'all' | 'water' | 'food'>('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [debouncedQuery, setDebouncedQuery] = useState('');
-  const [dateKey, setDateKey] = useState<string | null>(null);
-
-  const [items, setItems] = useState<UnifiedLogItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-
-  const isMountedRef = useRef(true);
-
-  // Debounce de 300ms na busca textual
+  const [type, setType] = useState<'all' | 'water' | 'food'>('all'),
+    [searchQuery, setSearchQuery] = useState(''),
+    [q, setQ] = useState(''),
+    [dateKey, setDateKey] = useState<string | null>(null),
+    [items, setItems] = useState<UnifiedLogItem[]>([]),
+    [more, setMore] = useState(false),
+    [hasMore, setHasMore] = useState(false),
+    [error, setError] = useState(''),
+    [loading, setLoading] = useState(true);
+  const loadingMore = useRef(false),
+    mounted = useRef(true),
+    generation = useRef(0);
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedQuery(searchQuery);
-    }, 300);
-
+    const timer = setTimeout(() => setQ(searchQuery), 300);
     return () => clearTimeout(timer);
   }, [searchQuery]);
-
-  const fetchLogs = useCallback(
-    async (isPullToRefresh = false) => {
-      if (isPullToRefresh) {
-        setIsRefreshing(true);
-      } else {
-        setIsLoading(true);
+  const fetchLogs = useCallback(async () => {
+    const current = ++generation.current,
+      scope = getDatabaseScope();
+    try {
+      const data = await logsRepository.getLogsHistory({
+        type,
+        searchQuery: q,
+        dateKey,
+      });
+      if (
+        mounted.current &&
+        current === generation.current &&
+        scope === getDatabaseScope()
+      ) {
+        setItems(data);
+        setHasMore(data.length === 50);
+        setError('');
       }
-
-      try {
-        const filters: HistoryFilters = {
-          type,
-          searchQuery: debouncedQuery,
-          dateKey,
-        };
-
-        const result = await logsRepository.getLogsHistory(filters);
-        if (isMountedRef.current) {
-          setItems(result);
-        }
-      } catch (err) {
-        console.error('[useLogsHistory] Erro ao buscar histórico:', err);
-      } finally {
-        if (isMountedRef.current) {
-          setIsLoading(false);
-          setIsRefreshing(false);
-        }
-      }
-    },
-    [type, debouncedQuery, dateKey]
-  );
-
-  // Listener para mudanças no SQLite local
+    } catch (e) {
+      if (mounted.current && current === generation.current)
+        setError(e instanceof Error ? e.message : 'Error');
+    } finally {
+      if (mounted.current && current === generation.current) setLoading(false);
+    }
+  }, [type, q, dateKey]);
   useEffect(() => {
-    isMountedRef.current = true;
-
-    const sub = addDatabaseChangeListener(({ tableName }) => {
-      if (tableName === 'food_logs' || tableName === 'water_logs') {
-        void fetchLogs();
+    mounted.current = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const sub = addDatabaseChangeListener(({ tableName, databaseFilePath }) => {
+      if (
+        databaseFilePath === expoDb.databasePath &&
+        ['food_logs', 'water_logs'].includes(tableName)
+      ) {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => {
+          void fetchLogs();
+        }, 80);
       }
     });
-
     return () => {
-      isMountedRef.current = false;
+      mounted.current = false;
       sub.remove();
+      if (timer) clearTimeout(timer);
     };
   }, [fetchLogs]);
-
-  // Recarrega sempre que a tela ganha foco (ao trocar de aba ou voltar de modals)
   useFocusEffect(
     useCallback(() => {
       void fetchLogs();
-    }, [fetchLogs])
+      return () => {
+        generation.current++;
+      };
+    }, [fetchLogs]),
   );
-
-  const clearFilters = useCallback(() => {
-    setType('all');
-    setSearchQuery('');
-    setDateKey(null);
-  }, []);
-
-  const deleteItem = useCallback(
-    async (id: string, itemType: 'water' | 'food') => {
-      try {
-        await logsRepository.deleteLog(id, itemType);
-        // Atualização otimista imediata na UI enquanto o listener do sqlite processa
-        setItems((prev) => prev.filter((item) => item.id !== id));
-      } catch (err) {
-        console.error('[useLogsHistory] Erro ao excluir log:', err);
-        throw err;
+  const loadMore = useCallback(async () => {
+    if (!hasMore || loadingMore.current || !items.length) return;
+    loadingMore.current = true;
+    setMore(true);
+    const request = generation.current;
+    const last = items[items.length - 1];
+    try {
+      const page = await logsRepository.getLogsHistory({
+        type,
+        searchQuery: q,
+        dateKey,
+        cursor: { occurredAt: last.occurredAt, id: last.id, type: last.type },
+      });
+      if (mounted.current && request === generation.current) {
+        setItems((current) => [
+          ...current,
+          ...page.filter(
+            (p) => !current.some((c) => c.id === p.id && c.type === p.type),
+          ),
+        ]);
+        setHasMore(page.length === 50);
+        setError('');
       }
-    },
-    []
-  );
-
-  // Formata o título amigável da seção de acordo com a data
-  const formatSectionTitle = useCallback(
-    (key: string): string => {
-      const today = toDateKey();
-      const yesterday = addDays(today, -1);
-
-      if (key === today) {
-        return isPt ? 'Hoje' : 'Today';
-      }
-      if (key === yesterday) {
-        return isPt ? 'Ontem' : 'Yesterday';
-      }
-
-      try {
-        const date = fromDateKey(key);
-        if (isPt) {
-          const day = date.getDate();
-          const months = [
-            'Jan',
-            'Fev',
-            'Mar',
-            'Abr',
-            'Mai',
-            'Jun',
-            'Jul',
-            'Ago',
-            'Set',
-            'Out',
-            'Nov',
-            'Dez',
-          ];
-          const month = months[date.getMonth()];
-          const year = date.getFullYear();
-          return `${day} de ${month}, ${year}`;
-        } else {
-          return date.toLocaleDateString('en-US', {
-            month: 'short',
-            day: 'numeric',
-            year: 'numeric',
-          });
-        }
-      } catch {
-        return key;
-      }
-    },
-    [isPt]
-  );
-
-  // Agrupa os itens em seções por data com totais calculados
-  const sections: HistorySection[] = [];
-  const map = new Map<string, UnifiedLogItem[]>();
-
-  for (const item of items) {
-    const list = map.get(item.dateKey) ?? [];
-    list.push(item);
-    map.set(item.dateKey, list);
-  }
-
-  for (const [key, groupItems] of map.entries()) {
-    let totalProteinG = 0;
-    let totalCaloriesKcal = 0;
-    let totalWaterMl = 0;
-
-    for (const item of groupItems) {
-      if (item.type === 'food') {
-        totalProteinG += item.proteinG;
-        totalCaloriesKcal += item.caloriesKcal;
-      } else {
-        totalWaterMl += item.amountMl;
-      }
+    } catch (e) {
+      if (mounted.current) setError(e instanceof Error ? e.message : 'Error');
+    } finally {
+      loadingMore.current = false;
+      if (mounted.current) setMore(false);
     }
-
-    sections.push({
-      dateKey: key,
-      title: formatSectionTitle(key),
-      data: groupItems,
-      totalProteinG: Math.round(totalProteinG * 10) / 10,
-      totalCaloriesKcal: Math.round(totalCaloriesKcal),
-      totalWaterMl,
-    });
+  }, [hasMore, items, type, q, dateKey]);
+  const deleteItem = async (id: string, itemType: 'food' | 'water') => {
+    await logsRepository.deleteLog(id, itemType);
+    setItems((current) => current.filter((i) => i.id !== id));
+  };
+  const groups = new Map<string, UnifiedLogItem[]>();
+  for (const item of items) {
+    const list = groups.get(item.dateKey) ?? [];
+    list.push(item);
+    groups.set(item.dateKey, list);
   }
-
-  const hasActiveFilters =
-    type !== 'all' || searchQuery.trim().length > 0 || dateKey !== null;
-
+  const sections: HistorySection[] = [...groups].map(([day, list]) => ({
+    dateKey: day,
+    title:
+      day === toDateKey()
+        ? isPt
+          ? 'Hoje'
+          : 'Today'
+        : day === addDays(toDateKey(), -1)
+          ? isPt
+            ? 'Ontem'
+            : 'Yesterday'
+          : day,
+    data: list,
+    totalProteinG: list.reduce(
+      (n, i) => n + (i.type === 'food' ? (i.proteinG ?? 0) : 0),
+      0,
+    ),
+    totalCaloriesKcal: list.reduce(
+      (n, i) => n + (i.type === 'food' ? (i.caloriesKcal ?? 0) : 0),
+      0,
+    ),
+    totalWaterMl: list.reduce(
+      (n, i) => n + (i.type === 'water' ? i.amountMl : 0),
+      0,
+    ),
+    partial: list.some(
+      (i) =>
+        i.type === 'food' && (i.proteinG === null || i.caloriesKcal === null),
+    ),
+  }));
   return {
     items,
     sections,
-    isLoading,
-    isRefreshing,
+    isLoading: loading,
+    isRefreshing: loading,
     type,
     setType,
     searchQuery,
     setSearchQuery,
     dateKey,
     setDateKey,
-    hasActiveFilters,
-    clearFilters,
+    hasActiveFilters:
+      type !== 'all' || !!searchQuery.trim() || dateKey !== null,
+    clearFilters: () => {
+      setType('all');
+      setSearchQuery('');
+      setDateKey(null);
+    },
     deleteItem,
-    refresh: () => fetchLogs(true),
+    refresh: fetchLogs,
+    loadMore,
+    loadingMore: more,
+    hasMore,
+    error,
   };
 }

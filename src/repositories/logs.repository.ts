@@ -1,90 +1,145 @@
-import { and, between, desc, eq, isNull, sql } from 'drizzle-orm';
-
-import { db } from '@/db/client';
-import { foodLogs, waterLogs, type EntryMethod, type FoodLog, type MealWindow, type WaterLog } from '@/db/schema';
-
-import { addDays, dateKeysInRange, isValidDateKey, lastNDateKeys, nowIso, toDateKey } from '@/utils/date';
-import { generateId } from '@/utils/id';
-
-import { goalsRepository, type Goals } from './goals.repository';
+import { and, desc, eq, isNull } from 'drizzle-orm';
+import { activeOwner, db, expoDb, scopeGuard } from '@/db/client';
 import {
-  ValidationError,
-  assertNonEmpty,
-  assertNonNegativeNumber,
-  assertPositiveInt,
-} from './validation';
-
+  foodLogs,
+  waterLogs,
+  type EntryMethod,
+  type FoodLog,
+  type MealWindow,
+  type WaterLog,
+} from '@/db/schema';
+import {
+  NUTRIENTS,
+  SOURCES,
+  validateNutrients,
+  eligibleAverage,
+  goalState,
+  selectPlan,
+  type Coverage,
+  type Nutrients,
+  type NutritionSource,
+} from '@/domain/nutrition';
+import {
+  addDays,
+  fromDateKey,
+  dateKeysInRange,
+  isValidDateKey,
+  lastNDateKeys,
+  nowIso,
+  toDateKey,
+} from '@/utils/date';
+import { generateId } from '@/utils/id';
+import { goalsRepository, type Goals } from './goals.repository';
+import { assertPositiveInt } from './validation';
 export type { FoodLog, WaterLog, MealWindow };
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Tipos públicos
-// ─────────────────────────────────────────────────────────────────────────────
-
 export interface AddWaterInput {
   amountMl: number;
-  /** Default: hoje (fuso local). Permite lançar retroativamente. */
-  dateKey?: string;
-  /** Data e horário opcional da ingestão. Se omitido, usa momento atual. */
-  ingestedAt?: Date | string | null;
-}
-
-export interface UpdateWaterInput {
-  amountMl: number;
+  category?: string;
   dateKey?: string;
   ingestedAt?: Date | string | null;
 }
-
-export interface AddFoodInput {
+export type UpdateWaterInput = AddWaterInput;
+export interface AddFoodInput extends Partial<Nutrients> {
   name: string;
-  proteinG: number;
-  caloriesKcal: number;
   entryMethod?: EntryMethod;
   mealWindow?: MealWindow;
   imageUri?: string | null;
-  dateKey?: string;
-  /** Data e horário opcional da ingestão. Se omitido, usa momento atual. */
-  ingestedAt?: Date | string | null;
-}
-
-export interface UpdateFoodInput {
-  name: string;
-  proteinG: number;
-  caloriesKcal: number;
-  mealWindow?: MealWindow;
-  imageUri?: string | null;
-  entryMethod?: EntryMethod;
+  nutritionSource?: NutritionSource;
+  inputChannel?: 'text' | 'image';
+  isEstimate?: boolean;
+  nutrientSources?: string | null;
+  portionAmount?: number | null;
+  portionUnit?: string | null;
+  templateId?: string | null;
   dateKey?: string;
   ingestedAt?: Date | string | null;
+  beverageMl?: number | null;
+  beverageCategory?: string;
 }
-
+export type UpdateFoodInput = AddFoodInput;
+export interface HistoryCursor {
+  occurredAt: string;
+  id: string;
+  type: string;
+}
 export interface HistoryFilters {
   type?: 'all' | 'water' | 'food';
   searchQuery?: string;
   dateKey?: string | null;
+  cursor?: HistoryCursor;
 }
-
 export type AnalyticsPeriod = '7d' | '14d' | '30d';
-
 export interface AnalyticsPeriodRange {
   startDateKey: string;
   endDateKey: string;
 }
-
 export type AnalyticsPeriodInput = AnalyticsPeriod | AnalyticsPeriodRange;
-
+export type UnifiedLogItem =
+  (FoodLog & { type: 'food' }) | (WaterLog & { type: 'water' });
+export interface MacroProgress {
+  consumed: number;
+  goal: number;
+  remaining: number;
+  percent: number;
+  met: boolean;
+  coverage: Coverage;
+  state: ReturnType<typeof goalState>;
+}
+export interface DailySummary {
+  dateKey: string;
+  protein: MacroProgress;
+  calories: MacroProgress;
+  water: MacroProgress;
+  nutrients: Record<(typeof NUTRIENTS)[number], Coverage>;
+  foodEntries: number;
+  waterEntries: number;
+  confirmed: boolean;
+  goalsKnown: boolean;
+}
+export interface DayConsistency {
+  dateKey: string;
+  proteinG: number;
+  caloriesKcal: number;
+  waterMl: number;
+  proteinGoalMet: boolean;
+  waterGoalMet: boolean;
+  bothGoalsMet: boolean;
+  confirmed: boolean;
+  hasLogs: boolean;
+  proteinComplete: boolean;
+  caloriesComplete: boolean;
+  goals: Goals | null;
+}
+export interface WeeklyConsistency {
+  startDateKey: string;
+  endDateKey: string;
+  totalDays: number;
+  proteinDaysMet: number;
+  waterDaysMet: number;
+  bothGoalsMetDays: number;
+  goals: Goals;
+  days: DayConsistency[];
+}
 export interface AnalyticsKPIs {
-  avgProteinG: number;
-  avgWaterMl: number;
-  avgCaloriesKcal: number;
-  proteinSuccessRate: number; // 0..100 (%)
-  waterSuccessRate: number; // 0..100 (%)
-  bothSuccessRate: number; // 0..100 (%)
+  nutrientAverages: Record<
+    (typeof NUTRIENTS)[number],
+    { value: number | null; days: number }
+  >;
+  avgProteinG: number | null;
+  avgWaterMl: number | null;
+  avgCaloriesKcal: number | null;
+  proteinSuccessRate: number;
+  waterSuccessRate: number;
+  bothSuccessRate: number;
   currentStreak: number;
   totalDays: number;
   daysWithLogs: number;
+  proteinDays: number;
+  calorieDays: number;
+  waterDays: number;
 }
-
 export interface DailySeriesPoint {
+  nutrients: Record<(typeof NUTRIENTS)[number], Coverage>;
   dateKey: string;
   label: string;
   proteinG: number;
@@ -93,17 +148,22 @@ export interface DailySeriesPoint {
   hitProteinGoal: boolean;
   hitWaterGoal: boolean;
   hitBothGoals: boolean;
+  confirmed: boolean;
+  hasLogs: boolean;
+  proteinComplete: boolean;
+  caloriesComplete: boolean;
+  goalsKnown: boolean;
+  proteinKnown: number;
+  caloriesKnown: number;
 }
-
 export interface MealWindowBreakdownItem {
   window: MealWindow;
   proteinG: number;
   caloriesKcal: number;
-  proteinPercent: number; // 0..100 (%)
-  caloriesPercent: number; // 0..100 (%)
+  proteinPercent: number;
+  caloriesPercent: number;
   entriesCount: number;
 }
-
 export interface AnalyticsData {
   period: AnalyticsPeriod | 'custom';
   startDateKey: string;
@@ -114,702 +174,595 @@ export interface AnalyticsData {
   mealWindowBreakdown: MealWindowBreakdownItem[];
 }
 
-export type UnifiedLogItem =
-  | {
-      id: string;
-      type: 'food';
-      name: string;
-      proteinG: number;
-      caloriesKcal: number;
-      entryMethod: EntryMethod;
-      mealWindow: MealWindow;
-      imageUri?: string | null;
-      dateKey: string;
-      createdAt: string;
-      updatedAt: string;
-    }
-  | {
-      id: string;
-      type: 'water';
-      amountMl: number;
-      dateKey: string;
-      createdAt: string;
-      updatedAt: string;
-    };
-
-export interface MacroProgress {
-  consumed: number;
-  goal: number;
-  remaining: number;
-  /** 0..∞ (não limitado a 100 para permitir UI de "excedeu"). */
-  percent: number;
-  met: boolean;
-}
-
-export interface DailySummary {
-  dateKey: string;
-  protein: MacroProgress;
-  calories: MacroProgress;
-  water: MacroProgress;
-  foodEntries: number;
-  waterEntries: number;
-}
-
-export interface DayConsistency {
-  dateKey: string;
-  proteinG: number;
-  caloriesKcal: number;
-  waterMl: number;
-  proteinGoalMet: boolean;
-  waterGoalMet: boolean;
-  /** Proteína >= meta E água >= meta. */
-  bothGoalsMet: boolean;
-}
-
-export interface WeeklyConsistency {
-  startDateKey: string;
-  endDateKey: string;
-  totalDays: number;
-  proteinDaysMet: number;
-  waterDaysMet: number;
-  bothGoalsMetDays: number;
-  goals: Goals;
-  /** Ordem cronológica, inclui dias sem registro (zerados). */
-  days: DayConsistency[];
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Helpers internos
-// ─────────────────────────────────────────────────────────────────────────────
-
-const notDeletedWater = isNull(waterLogs.deletedAt);
-const notDeletedFood = isNull(foodLogs.deletedAt);
-
-function resolveDateKey(dateKey?: string): string {
-  const key = dateKey ?? toDateKey();
-  if (!isValidDateKey(key)) throw new ValidationError(`dateKey inválido: ${key}`, 'dateKey');
+const snake = (s: string) => s.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
+export function resolveDateKey(key = toDateKey()) {
+  if (!isValidDateKey(key)) throw new Error('Data inválida / Invalid date');
   return key;
 }
-
-const round1 = (n: number) => Math.round(n * 10) / 10;
-
-function buildProgress(consumed: number, goal: number): MacroProgress {
+export function occurrence(
+  input: { dateKey?: string; ingestedAt?: Date | string | null },
+  fallback?: { dateKey: string; occurredAt: string; timeZone: string },
+) {
+  const date = input.ingestedAt ? new Date(input.ingestedAt) : null;
+  if (date && !Number.isFinite(date.getTime()))
+    throw new Error('Invalid timestamp');
+  if (date && fallback && date.getTime() === Date.parse(fallback.occurredAt))
+    return {
+      dateKey: fallback.dateKey,
+      occurredAt: fallback.occurredAt,
+      timeZone: fallback.timeZone,
+    };
+  const dateKey = date
+    ? toDateKey(date)
+    : resolveDateKey(input.dateKey ?? fallback?.dateKey);
   return {
-    consumed,
-    goal,
-    remaining: Math.max(goal - consumed, 0),
-    percent: goal > 0 ? Math.round((consumed / goal) * 100) : 0,
-    met: goal > 0 && consumed >= goal,
+    dateKey,
+    occurredAt:
+      date?.toISOString() ??
+      fallback?.occurredAt ??
+      (input.dateKey && input.dateKey !== toDateKey()
+        ? new Date(`${dateKey}T12:00:00`).toISOString()
+        : nowIso()),
+    timeZone:
+      (!date ? fallback?.timeZone : null) ??
+      Intl.DateTimeFormat().resolvedOptions().timeZone ??
+      'unknown',
   };
 }
-
-function parseIngestedAt(ingestedAt?: Date | string | null): Date | null {
-  if (!ingestedAt) return null;
-  const d = typeof ingestedAt === 'string' ? new Date(ingestedAt) : ingestedAt;
-  return isNaN(d.getTime()) ? null : d;
+export function dirty(
+  groupId: string | null = null,
+  operationId = generateId(),
+) {
+  return {
+    ownerId: activeOwner,
+    updatedAt: nowIso(),
+    isSynced: false,
+    operationId,
+    groupId,
+  };
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Escrita
-// ─────────────────────────────────────────────────────────────────────────────
-
+export function foodSignature(day: string): string {
+  return (
+    expoDb.getFirstSync<{ signature: string }>(
+      `SELECT coalesce(group_concat(part,'|'),'') signature FROM (SELECT id || ':' || coalesce(operation_id,updated_at) part FROM food_logs WHERE date_key=? AND deleted_at IS NULL ORDER BY id)`,
+      day,
+    )?.signature ?? ''
+  );
+}
+function reopen(day: string) {
+  expoDb.runSync(
+    'UPDATE daily_checkins SET confirmed=0,updated_at=?,is_synced=0,operation_id=? WHERE date_key=?',
+    nowIso(),
+    generateId(),
+    day,
+  );
+}
+export function validateFood(input: AddFoodInput) {
+  if (
+    typeof input.name !== 'string' ||
+    !input.name.trim() ||
+    input.name.trim().length > 200
+  )
+    throw new Error(
+      'Nome obrigatório, até 200 caracteres / Name required, up to 200 characters',
+    );
+  const nutrients = validateNutrients(input);
+  const source = input.nutritionSource ?? 'manual';
+  if (!SOURCES.includes(source)) throw new Error('Invalid source');
+  if (
+    input.mealWindow &&
+    !['breakfast', 'lunch', 'dinner', 'snack'].includes(input.mealWindow)
+  )
+    throw new Error('Invalid meal window');
+  if (input.inputChannel && !['text', 'image'].includes(input.inputChannel))
+    throw new Error('Invalid channel');
+  if (
+    input.portionAmount != null &&
+    (!Number.isFinite(input.portionAmount) || input.portionAmount <= 0)
+  )
+    throw new Error('Invalid portion');
+  if (
+    input.portionUnit != null &&
+    !['g', 'ml', 'portion'].includes(input.portionUnit)
+  )
+    throw new Error('Invalid unit');
+  if ((input.portionAmount == null) !== (input.portionUnit == null))
+    throw new Error('Specify portion amount and unit');
+  if (input.nutrientSources) {
+    const sources = JSON.parse(input.nutrientSources);
+    if (
+      !sources ||
+      typeof sources !== 'object' ||
+      Array.isArray(sources) ||
+      Object.entries(sources).some(
+        ([k, v]) =>
+          !NUTRIENTS.includes(k as (typeof NUTRIENTS)[number]) ||
+          !SOURCES.includes(v as NutritionSource),
+      )
+    )
+      throw new Error('Invalid nutrient sources');
+  }
+  if (input.beverageMl != null)
+    assertPositiveInt(input.beverageMl, 'beverageMl');
+  return {
+    ...nutrients,
+    name: input.name.trim(),
+    nutritionSource: source,
+    inputChannel: input.inputChannel ?? ('text' as const),
+    isEstimate: input.isEstimate ?? source === 'ai',
+    nutrientSources: input.nutrientSources ?? null,
+    entryMethod: input.entryMethod ?? ('manual' as const),
+    mealWindow: input.mealWindow ?? ('lunch' as const),
+    portionAmount: input.portionAmount ?? null,
+    portionUnit: input.portionUnit ?? null,
+    templateId: input.templateId ?? null,
+    imageUri: input.imageUri ?? null,
+  };
+}
 async function addWater(input: AddWaterInput): Promise<WaterLog> {
   assertPositiveInt(input.amountMl, 'amountMl');
-  const now = new Date();
-  const customDate = parseIngestedAt(input.ingestedAt);
-  const effectiveDate = customDate ?? now;
-  const createdAt = effectiveDate.toISOString();
-  const dateKey = customDate ? toDateKey(customDate) : resolveDateKey(input.dateKey);
-
-  const [row] = await db
+  if (!['water', 'tea', 'coffee', 'other'].includes(input.category ?? 'water'))
+    throw new Error(
+      'Bebida calórica deve ser uma refeição / Log caloric drinks as food',
+    );
+  return db
     .insert(waterLogs)
     .values({
       id: generateId(),
       amountMl: input.amountMl,
-      dateKey,
-      createdAt,
-      updatedAt: now.toISOString(),
-      isSynced: false,
+      category: input.category ?? 'water',
+      ...occurrence(input),
+      ...dirty(),
     })
-    .returning();
-
-  return row;
+    .returning()
+    .get();
 }
-
-async function addFood(input: AddFoodInput): Promise<FoodLog> {
-  assertNonEmpty(input.name, 'name');
-  assertNonNegativeNumber(input.proteinG, 'proteinG');
-  assertNonNegativeNumber(input.caloriesKcal, 'caloriesKcal');
-  const now = new Date();
-  const customDate = parseIngestedAt(input.ingestedAt);
-  const effectiveDate = customDate ?? now;
-  const createdAt = effectiveDate.toISOString();
-  const dateKey = customDate ? toDateKey(customDate) : resolveDateKey(input.dateKey);
-
-  const [row] = await db
-    .insert(foodLogs)
-    .values({
-      id: generateId(),
-      name: input.name.trim(),
-      proteinG: round1(input.proteinG),
-      caloriesKcal: Math.round(input.caloriesKcal),
-      entryMethod: input.entryMethod ?? 'manual',
-      mealWindow: input.mealWindow ?? 'lunch',
-      imageUri: input.imageUri ?? null,
-      dateKey,
-      createdAt,
-      updatedAt: now.toISOString(),
-      isSynced: false,
-    })
-    .returning();
-
-  return row;
+async function getFoodLogById(id: string) {
+  return (
+    db
+      .select()
+      .from(foodLogs)
+      .where(and(eq(foodLogs.id, id), isNull(foodLogs.deletedAt)))
+      .get() ?? null
+  );
 }
-
-/** Soft delete: mantém a linha para que a exclusão seja propagada ao Supabase. */
-async function removeWater(id: string): Promise<void> {
-  const now = nowIso();
-  await db
-    .update(waterLogs)
-    .set({ deletedAt: now, updatedAt: now, isSynced: false })
-    .where(and(eq(waterLogs.id, id), notDeletedWater));
+async function getWaterLogById(id: string) {
+  return (
+    db
+      .select()
+      .from(waterLogs)
+      .where(and(eq(waterLogs.id, id), isNull(waterLogs.deletedAt)))
+      .get() ?? null
+  );
 }
-
-async function removeFood(id: string): Promise<void> {
-  const now = nowIso();
-  await db
-    .update(foodLogs)
-    .set({ deletedAt: now, updatedAt: now, isSynced: false })
-    .where(and(eq(foodLogs.id, id), notDeletedFood));
-}
-
-async function deleteLog(id: string, type: 'water' | 'food'): Promise<void> {
-  if (type === 'water') {
-    await removeWater(id);
-  } else {
-    await removeFood(id);
-  }
-}
-
-async function getWaterLogById(id: string): Promise<WaterLog | null> {
-  const [row] = await db
+async function writeFood(input: AddFoodInput, id?: string): Promise<FoodLog> {
+  const assertScope = scopeGuard();
+  const values = validateFood(input);
+  const existing = id ? await getFoodLogById(id) : null;
+  assertScope();
+  if (id && !existing) throw new Error('Registro inexistente / Log not found');
+  const foodId = id ?? generateId();
+  const time = occurrence(input, existing ?? undefined);
+  const linked = db
     .select()
     .from(waterLogs)
-    .where(and(eq(waterLogs.id, id), notDeletedWater))
-    .limit(1);
-
-  return row ?? null;
+    .where(eq(waterLogs.foodLogId, foodId))
+    .get();
+  const hasBeverage =
+    input.beverageMl != null || (!!linked && input.beverageMl === undefined);
+  const group = hasBeverage || linked ? foodId : null;
+  const patch = dirty(group);
+  let result!: FoodLog;
+  db.transaction((tx) => {
+    if (existing)
+      result = tx
+        .update(foodLogs)
+        .set({ ...values, ...time, ...patch })
+        .where(eq(foodLogs.id, foodId))
+        .returning()
+        .get();
+    else
+      result = tx
+        .insert(foodLogs)
+        .values({ id: foodId, ...values, ...time, ...patch })
+        .returning()
+        .get();
+    if (hasBeverage) {
+      const drink = {
+        amountMl: input.beverageMl ?? linked!.amountMl,
+        category: input.beverageCategory ?? linked?.category ?? 'caloric',
+        foodLogId: foodId,
+        ...time,
+        ...patch,
+        deletedAt: null,
+      };
+      if (linked)
+        tx.update(waterLogs)
+          .set(drink)
+          .where(eq(waterLogs.id, linked.id))
+          .run();
+      else
+        tx.insert(waterLogs)
+          .values({ id: generateId(), ...drink })
+          .run();
+    } else if (linked)
+      tx.update(waterLogs)
+        .set({ ...patch, deletedAt: nowIso() })
+        .where(eq(waterLogs.id, linked.id))
+        .run();
+    reopen(time.dateKey);
+    if (existing && existing.dateKey !== time.dateKey) reopen(existing.dateKey);
+  });
+  return result;
 }
-
-async function getFoodLogById(id: string): Promise<FoodLog | null> {
-  const [row] = await db
-    .select()
-    .from(foodLogs)
-    .where(and(eq(foodLogs.id, id), notDeletedFood))
-    .limit(1);
-
-  return row ?? null;
+async function addFood(input: AddFoodInput) {
+  return writeFood(input);
 }
-
-async function updateWaterLog(id: string, input: UpdateWaterInput): Promise<WaterLog | null> {
+async function updateFoodLog(id: string, input: UpdateFoodInput) {
+  return writeFood(input, id);
+}
+async function updateWaterLog(id: string, input: UpdateWaterInput) {
+  const assertScope = scopeGuard();
   assertPositiveInt(input.amountMl, 'amountMl');
-  const now = nowIso();
-  const customDate = parseIngestedAt(input.ingestedAt);
-
-  const [row] = await db
+  const existing = await getWaterLogById(id);
+  assertScope();
+  if (!existing) return null;
+  if (existing.foodLogId)
+    throw new Error('Edite a refeição vinculada / Edit the linked meal');
+  return db
     .update(waterLogs)
     .set({
       amountMl: input.amountMl,
-      ...(customDate
-        ? { createdAt: customDate.toISOString(), dateKey: toDateKey(customDate) }
-        : input.dateKey
-        ? { dateKey: resolveDateKey(input.dateKey) }
-        : {}),
-      updatedAt: now,
-      isSynced: false,
+      category: input.category ?? existing.category,
+      ...occurrence(input, existing),
+      ...dirty(),
     })
-    .where(and(eq(waterLogs.id, id), notDeletedWater))
-    .returning();
-
-  return row ?? null;
+    .where(eq(waterLogs.id, id))
+    .returning()
+    .get();
 }
-
-async function updateFoodLog(id: string, input: UpdateFoodInput): Promise<FoodLog | null> {
-  assertNonEmpty(input.name, 'name');
-  assertNonNegativeNumber(input.proteinG, 'proteinG');
-  assertNonNegativeNumber(input.caloriesKcal, 'caloriesKcal');
-  const now = nowIso();
-  const customDate = parseIngestedAt(input.ingestedAt);
-
-  const [row] = await db
-    .update(foodLogs)
-    .set({
-      name: input.name.trim(),
-      proteinG: round1(input.proteinG),
-      caloriesKcal: Math.round(input.caloriesKcal),
-      ...(input.mealWindow ? { mealWindow: input.mealWindow } : {}),
-      ...(input.entryMethod ? { entryMethod: input.entryMethod } : {}),
-      ...(input.imageUri !== undefined ? { imageUri: input.imageUri } : {}),
-      ...(customDate
-        ? { createdAt: customDate.toISOString(), dateKey: toDateKey(customDate) }
-        : input.dateKey
-        ? { dateKey: resolveDateKey(input.dateKey) }
-        : {}),
-      updatedAt: now,
-      isSynced: false,
-    })
-    .where(and(eq(foodLogs.id, id), notDeletedFood))
-    .returning();
-
-  return row ?? null;
+async function removeFood(id: string) {
+  const assertScope = scopeGuard();
+  const food = await getFoodLogById(id);
+  assertScope();
+  if (!food) return;
+  const patch = { ...dirty(food.groupId), deletedAt: nowIso() };
+  db.transaction((tx) => {
+    tx.update(foodLogs).set(patch).where(eq(foodLogs.id, id)).run();
+    tx.update(waterLogs).set(patch).where(eq(waterLogs.foodLogId, id)).run();
+    reopen(food.dateKey);
+  });
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Leitura — queries "live" (use com useLiveQuery nas telas)
-// ─────────────────────────────────────────────────────────────────────────────
-
-function waterLogsByDateQuery(dateKey: string = toDateKey()) {
-  return db
-    .select()
-    .from(waterLogs)
-    .where(and(eq(waterLogs.dateKey, dateKey), notDeletedWater))
-    .orderBy(desc(waterLogs.createdAt));
+async function removeWater(id: string) {
+  const assertScope = scopeGuard();
+  const row = await getWaterLogById(id);
+  assertScope();
+  if (!row) return;
+  if (row.foodLogId) return removeFood(row.foodLogId);
+  db.update(waterLogs)
+    .set({ ...dirty(), deletedAt: nowIso() })
+    .where(eq(waterLogs.id, id))
+    .run();
 }
-
-function foodLogsByDateQuery(dateKey: string = toDateKey()) {
+async function deleteLog(id: string, type: 'water' | 'food') {
+  return type === 'food' ? removeFood(id) : removeWater(id);
+}
+function foodLogsByDateQuery(day = toDateKey()) {
   return db
     .select()
     .from(foodLogs)
-    .where(and(eq(foodLogs.dateKey, dateKey), notDeletedFood))
-    .orderBy(desc(foodLogs.createdAt));
+    .where(and(eq(foodLogs.dateKey, day), isNull(foodLogs.deletedAt)))
+    .orderBy(desc(foodLogs.occurredAt), desc(foodLogs.id));
+}
+function waterLogsByDateQuery(day = toDateKey()) {
+  return db
+    .select()
+    .from(waterLogs)
+    .where(and(eq(waterLogs.dateKey, day), isNull(waterLogs.deletedAt)))
+    .orderBy(desc(waterLogs.occurredAt), desc(waterLogs.id));
+}
+async function recentMeal(day = toDateKey()) {
+  return foodLogsByDateQuery(day).limit(1).get() ?? null;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Leitura — agregações de negócio
-// ─────────────────────────────────────────────────────────────────────────────
-
-/** Progresso do dia: consumido vs metas (proteína, calorias, água). */
-async function getDailySummary(dateKey?: string): Promise<DailySummary> {
-  const key = resolveDateKey(dateKey);
-
-  const [goals, [water], [food]] = await Promise.all([
-    goalsRepository.get(),
-    db
-      .select({
-        totalMl: sql<number>`coalesce(sum(${waterLogs.amountMl}), 0)`,
-        entries: sql<number>`count(*)`,
-      })
-      .from(waterLogs)
-      .where(and(eq(waterLogs.dateKey, key), notDeletedWater)),
-    db
-      .select({
-        proteinG: sql<number>`coalesce(sum(${foodLogs.proteinG}), 0)`,
-        caloriesKcal: sql<number>`coalesce(sum(${foodLogs.caloriesKcal}), 0)`,
-        entries: sql<number>`count(*)`,
-      })
-      .from(foodLogs)
-      .where(and(eq(foodLogs.dateKey, key), notDeletedFood)),
-  ]);
-
+function progress(
+  coverage: Coverage,
+  goal: number | null,
+  mode: 'reference' | 'energy' | 'limit' = 'reference',
+): MacroProgress {
+  const state = goalState(coverage, goal, mode);
   return {
-    dateKey: key,
-    protein: buildProgress(round1(food.proteinG), goals.proteinGoal),
-    calories: buildProgress(food.caloriesKcal, goals.caloriesGoal),
-    water: buildProgress(water.totalMl, goals.waterGoal),
-    foodEntries: food.entries,
-    waterEntries: water.entries,
+    consumed: coverage.total,
+    goal: goal ?? 0,
+    remaining: Math.max(0, (goal ?? 0) - coverage.total),
+    percent: goal ? (coverage.total / goal) * 100 : 0,
+    met: state === 'within',
+    coverage,
+    state,
   };
 }
-
-/**
- * Consistência semanal: nos últimos `days` dias (default 7, incluindo hoje),
- * quantos dias a soma de proteína >= meta e a soma de água >= meta.
- *
- * Usa um único GROUP BY por tabela (2 queries, O(dias) no JS) em vez de N queries.
- * Nota: compara com a meta ATUAL. Se no futuro quiser meta histórica, versione `user_goals`.
- */
-async function getWeeklyConsistency(endDateKey?: string, days = 7): Promise<WeeklyConsistency> {
-  const end = resolveDateKey(endDateKey);
-  const keys = lastNDateKeys(days, end);
-  const start = keys[0];
-
-  const [goals, waterByDay, foodByDay] = await Promise.all([
-    goalsRepository.get(),
-    db
-      .select({
-        dateKey: waterLogs.dateKey,
-        totalMl: sql<number>`coalesce(sum(${waterLogs.amountMl}), 0)`,
-      })
-      .from(waterLogs)
-      .where(and(between(waterLogs.dateKey, start, end), notDeletedWater))
-      .groupBy(waterLogs.dateKey),
-    db
-      .select({
-        dateKey: foodLogs.dateKey,
-        proteinG: sql<number>`coalesce(sum(${foodLogs.proteinG}), 0)`,
-        caloriesKcal: sql<number>`coalesce(sum(${foodLogs.caloriesKcal}), 0)`,
-      })
-      .from(foodLogs)
-      .where(and(between(foodLogs.dateKey, start, end), notDeletedFood))
-      .groupBy(foodLogs.dateKey),
-  ]);
-
-  const waterMap = new Map(waterByDay.map((r) => [r.dateKey, r.totalMl]));
-  const foodMap = new Map(foodByDay.map((r) => [r.dateKey, r]));
-
-  const dayRows: DayConsistency[] = keys.map((dateKey) => {
-    const proteinG = round1(foodMap.get(dateKey)?.proteinG ?? 0);
-    const caloriesKcal = foodMap.get(dateKey)?.caloriesKcal ?? 0;
-    const waterMl = waterMap.get(dateKey) ?? 0;
-    const proteinGoalMet = proteinG >= goals.proteinGoal;
-    const waterGoalMet = waterMl >= goals.waterGoal;
+async function summaries(start: string, end: string): Promise<DailySummary[]> {
+  const aggregate = NUTRIENTS.map(
+    (k) => `coalesce(sum(${snake(k)}),0) ${k},count(${snake(k)}) ${k}Known`,
+  ).join(',');
+  const food = expoDb.getAllSync<Record<string, number | string>>(
+    `SELECT date_key, count(*) entries, ${aggregate} FROM food_logs WHERE date_key BETWEEN ? AND ? AND deleted_at IS NULL GROUP BY date_key`,
+    start,
+    end,
+  );
+  const water = expoDb.getAllSync<{
+    date_key: string;
+    total: number;
+    entries: number;
+  }>(
+    `SELECT date_key,sum(amount_ml) total,count(*) entries FROM water_logs WHERE date_key BETWEEN ? AND ? AND deleted_at IS NULL GROUP BY date_key`,
+    start,
+    end,
+  );
+  const checks = expoDb.getAllSync<{
+    date_key: string;
+    confirmed: number;
+    food_signature: string;
+  }>(
+    `SELECT date_key,confirmed,food_signature FROM daily_checkins WHERE date_key BETWEEN ? AND ? AND deleted_at IS NULL ORDER BY updated_at`,
+    start,
+    end,
+  );
+  const planList = await goalsRepository.plans();
+  const foodMap = new Map(food.map((r) => [r.date_key, r]));
+  const waterMap = new Map(water.map((r) => [r.date_key, r]));
+  const checkMap = new Map(checks.map((r) => [r.date_key, r]));
+  return dateKeysInRange(start, end).map((day) => {
+    const f = foodMap.get(day);
+    const w = waterMap.get(day);
+    const check = checkMap.get(day);
+    const plan = selectPlan(planList, day);
+    const nutrients = Object.fromEntries(
+      NUTRIENTS.map((k) => {
+        const entries = Number(f?.entries ?? 0);
+        const known = Number(f?.[`${k}Known`] ?? 0);
+        return [
+          k,
+          {
+            total: Number(f?.[k] ?? 0),
+            entries,
+            known,
+            complete: entries > 0 && known === entries,
+          },
+        ];
+      }),
+    ) as DailySummary['nutrients'];
+    const wc = {
+      total: w?.total ?? 0,
+      known: w?.entries ?? 0,
+      entries: w?.entries ?? 0,
+      complete: !!w?.entries,
+    };
     return {
-      dateKey,
-      proteinG,
-      caloriesKcal,
-      waterMl,
-      proteinGoalMet,
-      waterGoalMet,
-      bothGoalsMet: proteinGoalMet && waterGoalMet,
+      dateKey: day,
+      protein: progress(nutrients.proteinG, plan?.proteinGoal ?? null),
+      calories: progress(
+        nutrients.caloriesKcal,
+        plan?.caloriesGoal ?? null,
+        'energy',
+      ),
+      water: progress(wc, plan?.waterGoal ?? null),
+      nutrients,
+      foodEntries: Number(f?.entries ?? 0),
+      waterEntries: w?.entries ?? 0,
+      confirmed:
+        !!check?.confirmed && check.food_signature === foodSignature(day),
+      goalsKnown: !!plan,
     };
   });
-
+}
+async function getDailySummary(day = toDateKey()) {
+  const key = resolveDateKey(day);
+  return (await summaries(key, key))[0];
+}
+async function getWeeklyConsistency(
+  end = toDateKey(),
+  days = 7,
+): Promise<WeeklyConsistency> {
+  const keys = lastNDateKeys(days, resolveDateKey(end));
+  const list = await summaries(keys[0], end);
+  const plans = await goalsRepository.plans();
+  const rows = list.map((s) => ({
+    dateKey: s.dateKey,
+    proteinG: s.protein.consumed,
+    caloriesKcal: s.calories.consumed,
+    waterMl: s.water.consumed,
+    proteinGoalMet: s.confirmed && s.protein.met,
+    waterGoalMet: s.water.met,
+    bothGoalsMet: s.confirmed && s.protein.met && s.calories.met,
+    confirmed: s.confirmed,
+    hasLogs: !!(s.foodEntries + s.waterEntries),
+    proteinComplete: s.nutrients.proteinG.complete,
+    caloriesComplete: s.nutrients.caloriesKcal.complete,
+    goals: selectPlan(plans, s.dateKey) as Goals | null,
+  }));
   return {
-    startDateKey: start,
+    startDateKey: keys[0],
     endDateKey: end,
     totalDays: days,
-    proteinDaysMet: dayRows.filter((d) => d.proteinGoalMet).length,
-    waterDaysMet: dayRows.filter((d) => d.waterGoalMet).length,
-    bothGoalsMetDays: dayRows.filter((d) => d.bothGoalsMet).length,
-    goals,
-    days: dayRows,
+    proteinDaysMet: rows.filter((d) => d.proteinGoalMet).length,
+    waterDaysMet: rows.filter((d) => d.waterGoalMet).length,
+    bothGoalsMetDays: rows.filter((d) => d.bothGoalsMet).length,
+    goals: await goalsRepository.get(),
+    days: rows,
   };
 }
-
-/**
- * Consulta unificada para a tela de Histórico com suporte a filtros
- * de tipo ('all' | 'water' | 'food'), busca textual e data específica.
- */
-async function getLogsHistory(filters: HistoryFilters = {}): Promise<UnifiedLogItem[]> {
-  const { type = 'all', searchQuery = '', dateKey = null } = filters;
-  const q = searchQuery.trim().toLowerCase();
-
-  const fetchFood = type === 'all' || type === 'food';
-  const fetchWater =
-    (type === 'all' || type === 'water') &&
-    (!q || q.includes('água') || q.includes('agua') || q.includes('water'));
-
-  const foodConditions = [notDeletedFood];
-  if (dateKey) {
-    foodConditions.push(eq(foodLogs.dateKey, dateKey));
-  }
-  if (q) {
-    foodConditions.push(sql`lower(${foodLogs.name}) LIKE ${`%${q}%`}`);
-  }
-
-  const waterConditions = [notDeletedWater];
-  if (dateKey) {
-    waterConditions.push(eq(waterLogs.dateKey, dateKey));
-  }
-
-  const [foodRows, waterRows] = await Promise.all([
-    fetchFood
-      ? db
-          .select()
-          .from(foodLogs)
-          .where(and(...foodConditions))
-          .orderBy(desc(foodLogs.createdAt))
-      : Promise.resolve([]),
-    fetchWater
-      ? db
-          .select()
-          .from(waterLogs)
-          .where(and(...waterConditions))
-          .orderBy(desc(waterLogs.createdAt))
-      : Promise.resolve([]),
-  ]);
-
-  const unified: UnifiedLogItem[] = [
-    ...foodRows.map((f) => ({
-      id: f.id,
-      type: 'food' as const,
-      name: f.name,
-      proteinG: f.proteinG,
-      caloriesKcal: f.caloriesKcal,
-      entryMethod: f.entryMethod,
-      mealWindow: f.mealWindow,
-      imageUri: f.imageUri ?? null,
-      dateKey: f.dateKey,
-      createdAt: f.createdAt,
-      updatedAt: f.updatedAt,
-    })),
-    ...waterRows.map((w) => ({
-      id: w.id,
-      type: 'water' as const,
-      amountMl: w.amountMl,
-      dateKey: w.dateKey,
-      createdAt: w.createdAt,
-      updatedAt: w.updatedAt,
-    })),
-  ];
-
-  unified.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  return unified;
-}
-
-/**
- * Calcula a sequência atual (streak) de dias consecutivos batendo pelo menos uma meta
- * (proteína, água ou calorias) até hoje. Se hoje ainda não bateu mas ontem bateu, o streak permanece ativo.
- */
 async function calculateCurrentStreak(
-  param1?: string | Goals,
-  param2?: string | Goals,
+  end: string = toDateKey(),
 ): Promise<number> {
-  let currentTodayKey: string;
-  let goalsParam: Goals | undefined;
-
-  if (typeof param1 === 'string') {
-    currentTodayKey = param1;
-    goalsParam = typeof param2 === 'object' ? param2 : undefined;
-  } else if (typeof param1 === 'object') {
-    goalsParam = param1;
-    currentTodayKey = typeof param2 === 'string' ? param2 : toDateKey();
-  } else {
-    currentTodayKey = toDateKey();
+  const days = expoDb.getAllSync<{ date_key: string }>(
+    `SELECT date_key FROM (SELECT date_key FROM food_logs WHERE deleted_at IS NULL UNION SELECT date_key FROM water_logs WHERE deleted_at IS NULL) WHERE date_key<=? ORDER BY date_key DESC`,
+    end,
+  );
+  const set = new Set(days.map((d) => d.date_key));
+  let day = set.has(end) ? end : addDays(end, -1);
+  let count = 0;
+  while (set.has(day)) {
+    count++;
+    day = addDays(day, -1);
   }
-
-  const currentGoals = goalsParam ?? (await goalsRepository.get());
-  const checkStart = addDays(currentTodayKey, -365);
-
-  const [waterRows, foodRows] = await Promise.all([
-    db
-      .select({
-        dateKey: waterLogs.dateKey,
-        totalMl: sql<number>`coalesce(sum(${waterLogs.amountMl}), 0)`,
-      })
-      .from(waterLogs)
-      .where(and(between(waterLogs.dateKey, checkStart, currentTodayKey), notDeletedWater))
-      .groupBy(waterLogs.dateKey),
-    db
-      .select({
-        dateKey: foodLogs.dateKey,
-        proteinG: sql<number>`coalesce(sum(${foodLogs.proteinG}), 0)`,
-        caloriesKcal: sql<number>`coalesce(sum(${foodLogs.caloriesKcal}), 0)`,
-      })
-      .from(foodLogs)
-      .where(and(between(foodLogs.dateKey, checkStart, currentTodayKey), notDeletedFood))
-      .groupBy(foodLogs.dateKey),
-  ]);
-
-  const waterMap = new Map(waterRows.map((r) => [r.dateKey, r.totalMl]));
-  const foodMap = new Map(foodRows.map((r) => [r.dateKey, r]));
-
-  const isDayHit = (dk: string) => {
-    const f = foodMap.get(dk);
-    const p = f?.proteinG ?? 0;
-    const c = f?.caloriesKcal ?? 0;
-    const w = waterMap.get(dk) ?? 0;
-    const proteinHit = currentGoals.proteinGoal > 0 && p >= currentGoals.proteinGoal;
-    const waterHit = currentGoals.waterGoal > 0 && w >= currentGoals.waterGoal;
-    const caloriesHit = currentGoals.caloriesGoal > 0 && c >= currentGoals.caloriesGoal;
-    return proteinHit || waterHit || caloriesHit;
-  };
-
-  let streak = 0;
-  let currentKey = currentTodayKey;
-
-  if (isDayHit(currentTodayKey)) {
-    streak = 1;
-    currentKey = addDays(currentTodayKey, -1);
-  } else {
-    const yesterday = addDays(currentTodayKey, -1);
-    if (isDayHit(yesterday)) {
-      streak = 1;
-      currentKey = addDays(yesterday, -1);
-    } else {
-      return 0;
-    }
-  }
-
-  while (currentKey >= checkStart) {
-    if (isDayHit(currentKey)) {
-      streak++;
-      currentKey = addDays(currentKey, -1);
-    } else {
-      break;
-    }
-  }
-
-  return streak;
+  return count;
 }
-
-/**
- * Calcula métricas agregadas para a tela de Analytics diretamente do SQLite.
- * Preenche dias vazios com 0 e gera KPIs, série temporal e divisão por janelas de refeição.
- */
-async function getAnalyticsData(periodInput: AnalyticsPeriodInput = '7d'): Promise<AnalyticsData> {
-  const todayKey = toDateKey();
-  let period: AnalyticsPeriod | 'custom';
-  let dateKeys: string[];
-  let start: string;
-  let end: string;
-
-  if (typeof periodInput === 'string') {
-    period = periodInput;
-    const count = periodInput === '30d' ? 30 : periodInput === '14d' ? 14 : 7;
-    dateKeys = lastNDateKeys(count, todayKey);
-    start = dateKeys[0];
-    end = dateKeys[dateKeys.length - 1];
-  } else {
-    period = 'custom';
-    start = resolveDateKey(periodInput.startDateKey);
-    end = resolveDateKey(periodInput.endDateKey);
-    if (start > end) {
-      const temp = start;
-      start = end;
-      end = temp;
-    }
-    dateKeys = dateKeysInRange(start, end);
+async function getLogsHistory(
+  filters: HistoryFilters = {},
+): Promise<UnifiedLogItem[]> {
+  const params: (string | number)[] = [];
+  const where: string[] = ['deleted_at IS NULL'];
+  if (filters.dateKey) {
+    where.push('date_key=?');
+    params.push(resolveDateKey(filters.dateKey));
   }
-
+  if (filters.searchQuery?.trim()) {
+    where.push("name LIKE ? ESCAPE '\\'");
+    params.push(`%${filters.searchQuery.trim().replace(/[\\%_]/g, '\\$&')}%`);
+  }
+  if (filters.type && filters.type !== 'all') {
+    where.push('type=?');
+    params.push(filters.type);
+  }
+  if (filters.cursor) {
+    where.push(
+      '(occurred_at < ? OR (occurred_at=? AND (id < ? OR (id=? AND type < ?))))',
+    );
+    params.push(
+      filters.cursor.occurredAt,
+      filters.cursor.occurredAt,
+      filters.cursor.id,
+      filters.cursor.id,
+      filters.cursor.type,
+    );
+  }
+  // Only the first 50 keys are materialized; records are fetched by PK after the UNION.
+  const keys = expoDb.getAllSync<{ id: string; type: 'food' | 'water' }>(
+    `SELECT id,type FROM (
+    SELECT id,'food' type,name,date_key,occurred_at,deleted_at FROM food_logs
+    UNION ALL SELECT id,'water' type,category name,date_key,occurred_at,deleted_at FROM water_logs)
+    WHERE ${where.join(' AND ')} ORDER BY occurred_at DESC,id DESC,type DESC LIMIT 50`,
+    ...params,
+  );
+  return keys.map((k) =>
+    k.type === 'food'
+      ? {
+          ...db.select().from(foodLogs).where(eq(foodLogs.id, k.id)).get()!,
+          type: 'food' as const,
+        }
+      : {
+          ...db.select().from(waterLogs).where(eq(waterLogs.id, k.id)).get()!,
+          type: 'water' as const,
+        },
+  );
+}
+async function getAnalyticsData(
+  input: AnalyticsPeriodInput = '7d',
+): Promise<AnalyticsData> {
+  const end =
+    typeof input === 'string' ? toDateKey() : resolveDateKey(input.endDateKey);
+  const start =
+    typeof input === 'string'
+      ? addDays(end, -(Number.parseInt(input) - 1))
+      : resolveDateKey(input.startDateKey);
+  if (
+    start > end ||
+    fromDateKey(end).getTime() - fromDateKey(start).getTime() > 365 * 86400000
+  )
+    throw new Error('Invalid period');
+  const list = await summaries(start, end);
   const goals = await goalsRepository.get();
-
-  const [waterByDay, foodByDay, mealWindows, streak] = await Promise.all([
-    db
-      .select({
-        dateKey: waterLogs.dateKey,
-        totalMl: sql<number>`coalesce(sum(${waterLogs.amountMl}), 0)`,
-        entries: sql<number>`count(*)`,
-      })
-      .from(waterLogs)
-      .where(and(between(waterLogs.dateKey, start, end), notDeletedWater))
-      .groupBy(waterLogs.dateKey),
-    db
-      .select({
-        dateKey: foodLogs.dateKey,
-        proteinG: sql<number>`coalesce(sum(${foodLogs.proteinG}), 0)`,
-        caloriesKcal: sql<number>`coalesce(sum(${foodLogs.caloriesKcal}), 0)`,
-        entries: sql<number>`count(*)`,
-      })
-      .from(foodLogs)
-      .where(and(between(foodLogs.dateKey, start, end), notDeletedFood))
-      .groupBy(foodLogs.dateKey),
-    db
-      .select({
-        mealWindow: foodLogs.mealWindow,
-        proteinG: sql<number>`coalesce(sum(${foodLogs.proteinG}), 0)`,
-        caloriesKcal: sql<number>`coalesce(sum(${foodLogs.caloriesKcal}), 0)`,
-        entries: sql<number>`count(*)`,
-      })
-      .from(foodLogs)
-      .where(and(between(foodLogs.dateKey, start, end), notDeletedFood))
-      .groupBy(foodLogs.mealWindow),
-    calculateCurrentStreak(goals, todayKey),
-  ]);
-
-  const waterMap = new Map(waterByDay.map((r) => [r.dateKey, r]));
-  const foodMap = new Map(foodByDay.map((r) => [r.dateKey, r]));
-
-  let totalProtein = 0;
-  let totalWater = 0;
-  let totalCalories = 0;
-  let daysWithProteinHit = 0;
-  let daysWithWaterHit = 0;
-  let daysWithBothHit = 0;
-  let daysWithLogs = 0;
-
-  const dailySeries: DailySeriesPoint[] = dateKeys.map((dateKey) => {
-    const f = foodMap.get(dateKey);
-    const w = waterMap.get(dateKey);
-
-    const proteinG = round1(f?.proteinG ?? 0);
-    const caloriesKcal = Math.round(f?.caloriesKcal ?? 0);
-    const waterMl = Math.round(w?.totalMl ?? 0);
-
-    const hasLog = (f?.entries ?? 0) > 0 || (w?.entries ?? 0) > 0;
-    if (hasLog) daysWithLogs++;
-
-    const hitProteinGoal = proteinG >= goals.proteinGoal;
-    const hitWaterGoal = waterMl >= goals.waterGoal;
-    const hitBothGoals = hitProteinGoal && hitWaterGoal;
-
-    if (hitProteinGoal) daysWithProteinHit++;
-    if (hitWaterGoal) daysWithWaterHit++;
-    if (hitBothGoals) daysWithBothHit++;
-
-    totalProtein += proteinG;
-    totalWater += waterMl;
-    totalCalories += caloriesKcal;
-
-    const [, m, d] = dateKey.split('-');
-    const label = `${d}/${m}`;
-
-    return {
-      dateKey,
-      label,
-      proteinG,
-      waterMl,
-      caloriesKcal,
-      hitProteinGoal,
-      hitWaterGoal,
-      hitBothGoals,
-    };
-  });
-
-  const totalDays = dateKeys.length || 1;
-  const avgProteinG = round1(totalProtein / totalDays);
-  const avgWaterMl = Math.round(totalWater / totalDays);
-  const avgCaloriesKcal = Math.round(totalCalories / totalDays);
-
-  const proteinSuccessRate = Math.round((daysWithProteinHit / totalDays) * 100);
-  const waterSuccessRate = Math.round((daysWithWaterHit / totalDays) * 100);
-  const bothSuccessRate = Math.round((daysWithBothHit / totalDays) * 100);
-
-  const ALL_WINDOWS: MealWindow[] = ['breakfast', 'lunch', 'dinner', 'snack'];
-  const mealMap = new Map(mealWindows.map((m) => [m.mealWindow, m]));
-
-  const totalPeriodFoodProtein = mealWindows.reduce((acc, curr) => acc + (curr.proteinG || 0), 0);
-  const totalPeriodFoodCalories = mealWindows.reduce((acc, curr) => acc + (curr.caloriesKcal || 0), 0);
-
-  const mealWindowBreakdown: MealWindowBreakdownItem[] = ALL_WINDOWS.map((win) => {
-    const found = mealMap.get(win);
-    const proteinG = round1(found?.proteinG ?? 0);
-    const caloriesKcal = Math.round(found?.caloriesKcal ?? 0);
-    const entriesCount = Number(found?.entries ?? 0);
-
-    return {
-      window: win,
-      proteinG,
-      caloriesKcal,
-      proteinPercent:
-        totalPeriodFoodProtein > 0 ? Math.round((proteinG / totalPeriodFoodProtein) * 100) : 0,
-      caloriesPercent:
-        totalPeriodFoodCalories > 0 ? Math.round((caloriesKcal / totalPeriodFoodCalories) * 100) : 0,
-      entriesCount,
-    };
-  });
-
+  const protein = list.filter(
+    (s) => s.confirmed && s.protein.coverage.complete,
+  );
+  const calories = list.filter(
+    (s) => s.confirmed && s.calories.coverage.complete,
+  );
+  const water = list.filter((s) => s.waterEntries > 0);
+  const avg = (days: DailySummary[], key: 'protein' | 'calories' | 'water') =>
+    days.length
+      ? days.reduce((a, s) => a + s[key].consumed, 0) / days.length
+      : null;
+  const windows = expoDb.getAllSync<{
+    window: MealWindow;
+    proteinG: number;
+    caloriesKcal: number;
+    entriesCount: number;
+  }>(
+    'SELECT meal_window "window",coalesce(sum(protein_g),0) proteinG,coalesce(sum(calories_kcal),0) caloriesKcal,count(*) entriesCount FROM food_logs WHERE date_key BETWEEN ? AND ? AND deleted_at IS NULL GROUP BY meal_window',
+    start,
+    end,
+  );
+  const pTotal = windows.reduce((a, w) => a + w.proteinG, 0),
+    eTotal = windows.reduce((a, w) => a + w.caloriesKcal, 0);
+  const rate = (n: number, d: number) => (d ? (n / d) * 100 : 0);
   return {
-    period,
+    period: typeof input === 'string' ? input : 'custom',
     startDateKey: start,
     endDateKey: end,
     goals,
     kpis: {
-      avgProteinG,
-      avgWaterMl,
-      avgCaloriesKcal,
-      proteinSuccessRate,
-      waterSuccessRate,
-      bothSuccessRate,
-      currentStreak: streak,
-      totalDays,
-      daysWithLogs,
+      nutrientAverages: Object.fromEntries(
+        NUTRIENTS.map((key) => [
+          key,
+          eligibleAverage(
+            list.map((day) => ({
+              confirmed: day.confirmed,
+              coverage: day.nutrients[key],
+            })),
+          ),
+        ]),
+      ) as AnalyticsKPIs['nutrientAverages'],
+      avgProteinG: avg(protein, 'protein'),
+      avgCaloriesKcal: avg(calories, 'calories'),
+      avgWaterMl: avg(water, 'water'),
+      proteinDays: protein.length,
+      calorieDays: calories.length,
+      waterDays: water.length,
+      proteinSuccessRate: rate(
+        protein.filter((s) => s.protein.met).length,
+        protein.length,
+      ),
+      waterSuccessRate: rate(
+        water.filter((s) => s.water.met).length,
+        water.length,
+      ),
+      bothSuccessRate: rate(
+        list.filter((s) => s.confirmed && s.protein.met && s.calories.met)
+          .length,
+        protein.length,
+      ),
+      currentStreak: await calculateCurrentStreak(),
+      totalDays: list.length,
+      daysWithLogs: list.filter((s) => s.foodEntries + s.waterEntries > 0)
+        .length,
     },
-    dailySeries,
-    mealWindowBreakdown,
+    dailySeries: list.map((s) => ({
+      dateKey: s.dateKey,
+      nutrients: s.nutrients,
+      label: s.dateKey.slice(5),
+      proteinG: s.protein.consumed,
+      waterMl: s.water.consumed,
+      caloriesKcal: s.calories.consumed,
+      hitProteinGoal: s.confirmed && s.protein.met,
+      hitWaterGoal: s.water.met,
+      hitBothGoals: s.confirmed && s.protein.met && s.calories.met,
+      confirmed: s.confirmed,
+      hasLogs: !!(s.foodEntries + s.waterEntries),
+      proteinComplete: s.protein.coverage.complete,
+      caloriesComplete: s.calories.coverage.complete,
+      goalsKnown: s.goalsKnown,
+      proteinKnown: s.nutrients.proteinG.known,
+      caloriesKnown: s.nutrients.caloriesKcal.known,
+    })),
+    mealWindowBreakdown: windows.map((w) => ({
+      ...w,
+      proteinPercent: rate(w.proteinG, pTotal),
+      caloriesPercent: rate(w.caloriesKcal, eTotal),
+    })),
   };
 }
-
 export const logsRepository = {
   addWater,
   addWaterLog: addWater,
@@ -826,8 +779,9 @@ export const logsRepository = {
   getAnalyticsData,
   waterLogsByDateQuery,
   foodLogsByDateQuery,
+  recentMeal,
   getDailySummary,
   getWeeklyConsistency,
   calculateCurrentStreak,
+  summaries,
 };
-

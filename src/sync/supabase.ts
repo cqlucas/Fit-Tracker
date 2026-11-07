@@ -1,81 +1,141 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-
+import NetInfo from '@react-native-community/netinfo';
 import {
+  createClient,
+  type Session,
+  type SupabaseClient,
+} from '@supabase/supabase-js';
+import { activateDatabase } from '@/db/client';
+import {
+  deleteSecureItem,
+  getSecureItem,
   getSupabaseCredentialsForService,
   registerCredentialsChangeListener,
+  setSecureItem,
 } from '@/services/api-keys.service';
 
-let cachedClient: SupabaseClient | null = null;
-let cachedCredentialsKey: string | null = null;
-
-// Ao mudar ou desvincular as credenciais no SecureStore, invalida o cache imediatamente
+let client: SupabaseClient | null = null,
+  credentialsKey = '';
+let authSubscription: { unsubscribe: () => void } | null = null;
+const listeners = new Set<() => void>();
+let currentSession: Session | null = null;
+let project = '';
+const storage = {
+  async getItem(key: string) {
+    const count = Number(await getSecureItem(`${key}-count`));
+    if (!count) return null;
+    const parts = await Promise.all(
+      Array.from({ length: count }, (_, i) => getSecureItem(`${key}-${i}`)),
+    );
+    return parts.every((v) => v !== null) ? parts.join('') : null;
+  },
+  async setItem(key: string, value: string) {
+    const old = Number(await getSecureItem(`${key}-count`));
+    const count = Math.ceil(value.length / 1800);
+    for (let i = 0; i < count; i++)
+      await setSecureItem(`${key}-${i}`, value.slice(i * 1800, (i + 1) * 1800));
+    await setSecureItem(`${key}-count`, String(count));
+    for (let i = count; i < old; i++) await deleteSecureItem(`${key}-${i}`);
+  },
+  async removeItem(key: string) {
+    const count = Number(await getSecureItem(`${key}-count`));
+    await deleteSecureItem(`${key}-count`);
+    for (let i = 0; i < count; i++) await deleteSecureItem(`${key}-${i}`);
+  },
+};
+export const subscribeAuth = (fn: () => void) => {
+  listeners.add(fn);
+  return () => {
+    listeners.delete(fn);
+  };
+};
+export const getAuthSession = () => currentSession;
+export const getProjectId = () => project;
+function applySession(session: Session | null) {
+  currentSession = session;
+  activateDatabase(session?.user.id ?? null, project);
+  listeners.forEach((fn) => fn());
+}
+export function createTemporarySupabaseClient(url: string, anonKey: string) {
+  return createClient(url.trim().replace(/\/+$/, ''), anonKey.trim(), {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+  });
+}
+export function resetDynamicSupabaseClient() {
+  authSubscription?.unsubscribe();
+  authSubscription = null;
+  client?.auth.stopAutoRefresh();
+  client = null;
+  credentialsKey = '';
+  applySession(null);
+}
 registerCredentialsChangeListener(() => {
   resetDynamicSupabaseClient();
+  void getDynamicSupabaseClient();
 });
-
-/**
- * Cria uma instância efêmera de SupabaseClient com persistência de sessão desabilitada.
- * Muito útil para pré-validar a conexão e o schema na UI antes de salvar no SecureStore.
- */
-export function createTemporarySupabaseClient(url: string, anonKey: string): SupabaseClient {
-  const cleanUrl = url.trim().replace(/\/+$/, '');
-  const cleanKey = anonKey.trim();
-
-  return createClient(cleanUrl, cleanKey, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-      detectSessionInUrl: false,
-    },
-  });
-}
-
-/**
- * Reseta o cliente dinâmico do cache em memória.
- */
-export function resetDynamicSupabaseClient(): void {
-  cachedClient = null;
-  cachedCredentialsKey = null;
-}
-
-/**
- * Retorna o cliente Supabase configurado dinamicamente para o usuário atual.
- * Se o usuário não tiver configurado URL e Anon Key no SecureStore, retorna `null`.
- * Reutiliza a instância em cache se as credenciais não foram alteradas.
- */
 export async function getDynamicSupabaseClient(): Promise<SupabaseClient | null> {
-  const credentials = await getSupabaseCredentialsForService();
-  if (!credentials || !credentials.url || !credentials.anonKey) {
-    resetDynamicSupabaseClient();
+  const creds = await getSupabaseCredentialsForService();
+  if (!creds) {
+    if (client) resetDynamicSupabaseClient();
     return null;
   }
-
-  const currentKey = `${credentials.url}:::${credentials.anonKey}`;
-  if (cachedClient && cachedCredentialsKey === currentKey) {
-    return cachedClient;
-  }
-
-  cachedClient = createClient(credentials.url, credentials.anonKey, {
+  const key = creds.url + creds.anonKey;
+  if (client && credentialsKey === key) return client;
+  if (client) resetDynamicSupabaseClient();
+  project = new URL(creds.url).host;
+  client = createClient(creds.url, creds.anonKey, {
     auth: {
-      persistSession: false,
-      autoRefreshToken: false,
+      storage,
+      persistSession: true,
+      autoRefreshToken: true,
       detectSessionInUrl: false,
+      storageKey: `fit-auth-${project.replace(/[^a-zA-Z0-9.-]/g, '-')}`,
     },
   });
-  cachedCredentialsKey = currentKey;
-
-  return cachedClient;
+  credentialsKey = key;
+  const created = client;
+  authSubscription = created.auth.onAuthStateChange((_event, session) => {
+    if (client === created) applySession(session);
+  }).data.subscription;
+  const { data } = await created.auth.getSession();
+  if (client === created) applySession(data.session);
+  return created;
+}
+export async function sendEmailCode(email: string) {
+  const c = await getDynamicSupabaseClient();
+  if (!c) throw new Error('Configure Supabase');
+  const { error } = await c.auth.signInWithOtp({ email: email.trim() });
+  if (error) throw error;
+}
+export async function verifyEmailCode(email: string, token: string) {
+  const c = await getDynamicSupabaseClient();
+  if (!c) throw new Error('Configure Supabase');
+  const { error } = await c.auth.verifyOtp({
+    email: email.trim(),
+    token: token.trim(),
+    type: 'email',
+  });
+  if (error) throw error;
+}
+export async function signOut() {
+  const c = await getDynamicSupabaseClient();
+  const key = `fit-auth-${project.replace(/[^a-zA-Z0-9.-]/g, '-')}`;
+  try {
+    const network = await NetInfo.fetch();
+    if (c && network.isConnected && network.isInternetReachable !== false)
+      await c.auth.signOut({ scope: 'local' });
+  } finally {
+    // Returning to local mode must work without reaching the authentication server.
+    await storage.removeItem(key);
+    await storage.removeItem(`${key}-user`);
+    resetDynamicSupabaseClient();
+  }
 }
 
-/**
- * Verifica de forma assíncrona se há um projeto Supabase configurado pelo usuário.
- */
-export async function isSupabaseConfigured(): Promise<boolean> {
-  const credentials = await getSupabaseCredentialsForService();
-  return Boolean(credentials && credentials.url && credentials.anonKey);
+export async function isSupabaseConfigured() {
+  return !!(await getSupabaseCredentialsForService());
 }
-
-/**
- * Exportação legada mantida como getter/null-safe para retrocompatibilidade.
- */
 export const supabase: SupabaseClient | null = null;

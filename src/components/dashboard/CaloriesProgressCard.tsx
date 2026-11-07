@@ -13,10 +13,14 @@ export interface CaloriesProgressCardProps {
   goal: number;
 }
 
-export function CaloriesProgressCard({ consumed, goal }: CaloriesProgressCardProps) {
+export function CaloriesProgressCard({
+  consumed,
+  goal,
+}: CaloriesProgressCardProps) {
   const { t, isPt } = useLanguage();
-  const percent = goal > 0 ? Math.min(Math.round((consumed / goal) * 100), 100) : 0;
-  const remaining = Math.max(goal - consumed, 0);
+  const percent =
+    goal > 0 ? Math.min(Math.round((consumed / goal) * 100), 100) : 0;
+  const remaining = consumed;
 
   const locale = isPt ? 'pt-BR' : 'en-US';
   const formatNumber = (num: number) => num.toLocaleString(locale);
@@ -33,18 +37,26 @@ export function CaloriesProgressCard({ consumed, goal }: CaloriesProgressCardPro
             <Typography variant="labelMd" style={styles.title}>
               {t.home.caloriesTitle}
             </Typography>
-            <Typography variant="unitCaption" color={colors.onSurfaceVariant} style={styles.subtitle}>
-              {t.home.caloriesSubtitle}
+            <Typography
+              variant="unitCaption"
+              color={colors.onSurfaceVariant}
+              style={styles.subtitle}
+            >
+              {isPt ? 'Energia registrada' : 'Logged energy'}
             </Typography>
           </View>
         </View>
 
         <View style={styles.remainingGroup}>
-          <Typography variant="headlineSm" color={colors.tertiaryContainer} style={styles.remainingNumber}>
+          <Typography
+            variant="headlineSm"
+            color={colors.tertiaryContainer}
+            style={styles.remainingNumber}
+          >
             {formatNumber(remaining)}
           </Typography>
           <Typography variant="labelSm" color={colors.onSurfaceVariant}>
-            {t.home.kcalLeft}
+            {isPt ? 'kcal registradas' : 'kcal logged'}
           </Typography>
         </View>
       </View>
@@ -63,15 +75,23 @@ export function CaloriesProgressCard({ consumed, goal }: CaloriesProgressCardPro
         <View style={styles.consumedInfo}>
           <View style={styles.dot} />
           <Typography variant="labelMd" color={colors.onSurfaceVariant}>
-            <Typography variant="labelMd" color={colors.onSurface} style={styles.bold}>
+            <Typography
+              variant="labelMd"
+              color={colors.onSurface}
+              style={styles.bold}
+            >
               {formatNumber(consumed)}
-            </Typography>
-            {' '}{t.home.kcalConsumed}
+            </Typography>{' '}
+            {t.home.kcalConsumed}
           </Typography>
         </View>
 
-        <Typography variant="labelSm" color={colors.onSurfaceVariant} style={styles.goalText}>
-          {t.home.goalCalories(formatNumber(goal))}
+        <Typography
+          variant="labelSm"
+          color={colors.onSurfaceVariant}
+          style={styles.goalText}
+        >
+          {`${isPt ? 'Faixa' : 'Range'}: ${formatNumber(goal * 0.95)}–${formatNumber(goal * 1.05)} kcal`}
         </Typography>
       </View>
     </Card>

@@ -1,298 +1,32 @@
-import {
-  Award,
-  Droplets,
-  Dumbbell,
-  Flame,
-  TrendingDown,
-  TrendingUp,
-} from 'lucide-react-native';
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
-
-import { Typography } from '@/components/ui/Typography';
+import { NUTRIENTS } from '@/domain/nutrition';
+import { v2Translations } from '@/i18n/translations';
 import { useLanguage } from '@/context/LanguageContext';
 import { type Goals } from '@/repositories/goals.repository';
 import { type AnalyticsKPIs } from '@/repositories/logs.repository';
-import { colors, radii, spacing } from '@/theme/tokens';
-
+import { Note, Panel, useNumberFormat } from '@/components/ui/Form';
 export interface SummaryMetricsGridProps {
   kpis: AnalyticsKPIs;
   goals: Goals;
 }
-
-export function SummaryMetricsGrid({ kpis, goals }: SummaryMetricsGridProps) {
-  const { t } = useLanguage();
-
-  const proteinDiff = Math.round(kpis.avgProteinG - goals.proteinGoal);
-  const isProteinAbove = proteinDiff >= 0;
-
-  const waterFormatted =
-    kpis.avgWaterMl >= 1000
-      ? `${(kpis.avgWaterMl / 1000).toFixed(1)}L`
-      : `${kpis.avgWaterMl}ml`;
-  const waterGoalFormatted =
-    goals.waterGoal >= 1000
-      ? `${(goals.waterGoal / 1000).toFixed(1)}L`
-      : `${goals.waterGoal}ml`;
-
-  const calorieDiff = kpis.avgCaloriesKcal - goals.caloriesGoal;
-
+export function SummaryMetricsGrid({ kpis }: SummaryMetricsGridProps) {
+  const { isPt, language } = useLanguage(),
+    f = useNumberFormat();
   return (
-    <View style={styles.container}>
-      {/* Linha 1 */}
-      <View style={styles.row}>
-        {/* Card 1: Proteína */}
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <View style={[styles.iconBadge, { backgroundColor: `${colors.primary}18` }]}>
-              <Dumbbell size={16} color={colors.primary} />
-            </View>
-            <View
-              style={[
-                styles.statusPill,
-                {
-                  backgroundColor: isProteinAbove
-                    ? `${colors.primary}20`
-                    : `${colors.surfaceHigh}`,
-                },
-              ]}>
-              {isProteinAbove ? (
-                <TrendingUp size={12} color={colors.primary} />
-              ) : (
-                <TrendingDown size={12} color={colors.onSurfaceVariant} />
-              )}
-              <Typography
-                variant="unitCaption"
-                color={isProteinAbove ? colors.primary : colors.onSurfaceVariant}
-                style={styles.statusPillText}>
-                {isProteinAbove ? `+${proteinDiff}g` : `${proteinDiff}g`}
-              </Typography>
-            </View>
-          </View>
-
-          <View style={styles.metricArea}>
-            <View style={styles.valueRow}>
-              <Typography
-                variant="metricNumeralLg"
-                style={styles.mainValue}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.7}>
-                {kpis.avgProteinG}
-              </Typography>
-              <Typography variant="labelSm" color={colors.primary} style={styles.unitText}>
-                g/dia
-              </Typography>
-            </View>
-            <Typography variant="labelSm" color={colors.onSurfaceVariant} numberOfLines={1}>
-              {t.analytics.avgProtein}
-            </Typography>
-          </View>
-
-          <Typography variant="unitCaption" color={colors.onSurfaceVariant} style={styles.metaHint} numberOfLines={1}>
-            Meta: {goals.proteinGoal}g/dia
-          </Typography>
-        </View>
-
-        {/* Card 2: Água / Hidratação */}
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <View style={[styles.iconBadge, { backgroundColor: `${colors.secondary}18` }]}>
-              <Droplets size={16} color={colors.secondary} />
-            </View>
-            <View
-              style={[
-                styles.statusPill,
-                {
-                  backgroundColor:
-                    kpis.avgWaterMl >= goals.waterGoal
-                      ? `${colors.secondary}20`
-                      : `${colors.surfaceHigh}`,
-                },
-              ]}>
-              <Typography
-                variant="unitCaption"
-                color={
-                  kpis.avgWaterMl >= goals.waterGoal
-                    ? colors.secondary
-                    : colors.onSurfaceVariant
-                }
-                style={styles.statusPillText}
-                numberOfLines={1}>
-                {kpis.waterSuccessRate}% batido
-              </Typography>
-            </View>
-          </View>
-
-          <View style={styles.metricArea}>
-            <View style={styles.valueRow}>
-              <Typography
-                variant="metricNumeralLg"
-                style={styles.mainValue}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.7}>
-                {waterFormatted}
-              </Typography>
-              <Typography variant="labelSm" color={colors.secondary} style={styles.unitText}>
-                /dia
-              </Typography>
-            </View>
-            <Typography variant="labelSm" color={colors.onSurfaceVariant} numberOfLines={1}>
-              {t.analytics.avgWater}
-            </Typography>
-          </View>
-
-          <Typography variant="unitCaption" color={colors.onSurfaceVariant} style={styles.metaHint} numberOfLines={1}>
-            Meta: {waterGoalFormatted}/dia
-          </Typography>
-        </View>
-      </View>
-
-      {/* Linha 2 */}
-      <View style={styles.row}>
-        {/* Card 3: Taxa de Sucesso / Streak */}
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <View style={[styles.iconBadge, { backgroundColor: `${colors.primary}18` }]}>
-              <Award size={16} color={colors.primary} />
-            </View>
-            {kpis.currentStreak > 0 && (
-              <View style={[styles.statusPill, { backgroundColor: `${colors.tertiaryContainer}25` }]}>
-                <Flame size={12} color={colors.tertiaryContainer} />
-                <Typography
-                  variant="unitCaption"
-                  color={colors.tertiaryContainer}
-                  style={styles.statusPillText}
-                  numberOfLines={1}>
-                  {kpis.currentStreak}d streak
-                </Typography>
-              </View>
-            )}
-          </View>
-
-          <View style={styles.metricArea}>
-            <View style={styles.valueRow}>
-              <Typography
-                variant="metricNumeralLg"
-                style={styles.mainValue}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.7}>
-                {kpis.bothSuccessRate}%
-              </Typography>
-            </View>
-            <Typography variant="labelSm" color={colors.onSurfaceVariant} numberOfLines={1}>
-              {t.analytics.successRate}
-            </Typography>
-          </View>
-
-          <Typography variant="unitCaption" color={colors.onSurfaceVariant} style={styles.metaHint} numberOfLines={1}>
-            Prot: {kpis.proteinSuccessRate}% • Água: {kpis.waterSuccessRate}%
-          </Typography>
-        </View>
-
-        {/* Card 4: Calorias Diárias */}
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <View style={[styles.iconBadge, { backgroundColor: `${colors.tertiaryContainer}18` }]}>
-              <Flame size={16} color={colors.tertiaryContainer} />
-            </View>
-            <View style={[styles.statusPill, { backgroundColor: colors.surfaceHigh }]}>
-              <Typography variant="unitCaption" color={colors.onSurfaceVariant} style={styles.statusPillText} numberOfLines={1}>
-                {calorieDiff > 0 ? `+${calorieDiff}` : `${calorieDiff}`} kcal
-              </Typography>
-            </View>
-          </View>
-
-          <View style={styles.metricArea}>
-            <View style={styles.valueRow}>
-              <Typography
-                variant="metricNumeralLg"
-                style={styles.mainValue}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.7}>
-                {kpis.avgCaloriesKcal}
-              </Typography>
-              <Typography variant="labelSm" color={colors.tertiaryContainer} style={styles.unitText}>
-                kcal
-              </Typography>
-            </View>
-            <Typography variant="labelSm" color={colors.onSurfaceVariant} numberOfLines={1}>
-              {t.analytics.avgCalories}
-            </Typography>
-          </View>
-
-          <Typography variant="unitCaption" color={colors.onSurfaceVariant} style={styles.metaHint} numberOfLines={1}>
-            Meta: {goals.caloriesGoal} kcal/dia
-          </Typography>
-        </View>
-      </View>
-    </View>
+    <Panel title={isPt ? 'Médias com cobertura' : 'Averages and coverage'}>
+      <Note>{`${isPt ? 'Proteína' : 'Protein'}: ${f(kpis.avgProteinG)} g · ${kpis.proteinDays}/${kpis.totalDays} ${isPt ? 'dias confirmados completos' : 'complete confirmed days'}`}</Note>
+      <Note>{`${isPt ? 'Energia' : 'Energy'}: ${f(kpis.avgCaloriesKcal)} kcal · ${kpis.calorieDays}/${kpis.totalDays} ${isPt ? 'dias confirmados completos' : 'complete confirmed days'}`}</Note>
+      <Note>{`${isPt ? 'Líquidos registrados' : 'Logged fluids'}: ${f(kpis.avgWaterMl)} mL · ${kpis.waterDays}/${kpis.totalDays} ${isPt ? 'dias com líquidos' : 'days with fluids'}`}</Note>
+      {NUTRIENTS.slice(2).map((key) => (
+        <Note
+          key={key}
+        >{`${v2Translations[language].nutrients[key]}: ${f(kpis.nutrientAverages[key].value)} · ${kpis.nutrientAverages[key].days}/${kpis.totalDays} ${isPt ? 'dias confirmados completos' : 'complete confirmed days'}`}</Note>
+      ))}
+      <Note>
+        {isPt
+          ? '— significa dados insuficientes. Dias sem registro não entram como zero nas médias. Confirmar um dia não preenche nutrientes desconhecidos.'
+          : '— means insufficient data. Unlogged days do not enter averages as zero. Confirming a day does not fill in unknown nutrients.'}
+      </Note>
+    </Panel>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    gap: spacing.gutterMobile,
-  },
-  row: {
-    flexDirection: 'row',
-    gap: spacing.gutterMobile,
-  },
-  card: {
-    flex: 1,
-    minWidth: 0,
-    backgroundColor: colors.surfaceLow,
-    borderRadius: radii.xl,
-    padding: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.strokeCrisp,
-    justifyContent: 'space-between',
-    minHeight: 128,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.xs,
-  },
-  iconBadge: {
-    width: 30,
-    height: 30,
-    borderRadius: radii.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  statusPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: radii.full,
-  },
-  statusPillText: {
-    fontWeight: '700',
-  },
-  metricArea: {
-    marginVertical: 4,
-  },
-  valueRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 4,
-  },
-  mainValue: {
-    fontWeight: '800',
-    color: colors.onSurface,
-  },
-  unitText: {
-    fontWeight: '700',
-  },
-  metaHint: {
-    marginTop: 2,
-    opacity: 0.8,
-  },
-});

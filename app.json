@@ -2,7 +2,7 @@
   "expo": {
     "name": "Fit Tracker",
     "slug": "Fit-Tracker",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/app-icon.png",
     "scheme": "fittracker",
@@ -46,7 +46,8 @@
         }
       ],
       "expo-sqlite",
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-sharing"
     ],
     "experiments": {
       "typedRoutes": true,

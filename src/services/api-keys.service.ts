@@ -1,274 +1,138 @@
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
-
 export type AiProvider = 'gemini' | 'groq';
-
 export interface ApiKeysStatus {
   hasGeminiKey: boolean;
   hasGroqKey: boolean;
   hasSupabaseLinked: boolean;
   lastSyncAt?: string | null;
 }
-
-const SECURE_KEYS: Record<AiProvider, string> = {
-  gemini: 'secure_gemini_api_key',
-  groq: 'secure_groq_api_key',
-};
-
-const SECURE_SUPABASE_URL = 'secure_supabase_url';
-const SECURE_SUPABASE_ANON_KEY = 'secure_supabase_anon_key';
-const SECURE_SUPABASE_LAST_SYNC_AT = 'secure_supabase_last_sync_at';
-
-// Marcador especial quando o usuário desvincula explicitamente no app
-// Isso impede que um valor local em .env (dev) sobrescreva a desvinculação da UI
-const UNLINKED_SENTINEL = '__UNLINKED__';
-
-// Fallback em memória caso o SecureStore não esteja disponível (ex: web sem suporte a keystore)
-const memoryStore = new Map<string, string>();
-
-let changeListeners: (() => void)[] = [];
-
-export function registerCredentialsChangeListener(listener: () => void): () => void {
-  changeListeners.push(listener);
+const memory = new Map<string, string>();
+const listeners = new Set<() => void>();
+export function registerCredentialsChangeListener(fn: () => void) {
+  listeners.add(fn);
   return () => {
-    changeListeners = changeListeners.filter((l) => l !== listener);
+    listeners.delete(fn);
   };
 }
-
-function notifyCredentialsChanged(): void {
-  for (const listener of changeListeners) {
-    try {
-      listener();
-    } catch {}
-  }
+export async function setSecureItem(key: string, value: string) {
+  if (Platform.OS !== 'web' && (await SecureStore.isAvailableAsync()))
+    return SecureStore.setItemAsync(key, value);
+  if (typeof localStorage !== 'undefined') localStorage.setItem(key, value);
+  else memory.set(key, value);
 }
-
-async function isSecureStoreAvailable(): Promise<boolean> {
-  if (Platform.OS === 'web') return false;
+export async function getSecureItem(key: string): Promise<string | null> {
+  if (Platform.OS !== 'web' && (await SecureStore.isAvailableAsync()))
+    return SecureStore.getItemAsync(key);
+  return typeof localStorage !== 'undefined'
+    ? localStorage.getItem(key)
+    : (memory.get(key) ?? null);
+}
+export async function deleteSecureItem(key: string) {
+  if (Platform.OS !== 'web' && (await SecureStore.isAvailableAsync()))
+    return SecureStore.deleteItemAsync(key);
+  if (typeof localStorage !== 'undefined') localStorage.removeItem(key);
+  else memory.delete(key);
+}
+export function assertPublicSupabaseKey(key: string): void {
+  if (/^sb_publishable_[a-zA-Z0-9_-]+$/.test(key)) return;
+  const encoded = key.split('.')[1];
+  if (!encoded) throw new Error('Use a public anon/publishable key');
+  const alphabet =
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  let bits = 0,
+    buffer = 0,
+    decoded = '';
+  for (const character of encoded
+    .replace(/-/g, '+')
+    .replace(/_/g, '/')
+    .replace(/=+$/, '')) {
+    const index = alphabet.indexOf(character);
+    if (index < 0) throw new Error('Invalid public key');
+    buffer = (buffer << 6) | index;
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      decoded += String.fromCharCode((buffer >> bits) & 255);
+    }
+  }
+  let role: unknown;
   try {
-    return await SecureStore.isAvailableAsync();
+    role = JSON.parse(decoded).role;
   } catch {
-    return false;
+    throw new Error('Invalid public key');
   }
+  if (role !== 'anon') throw new Error('Use a public anon/publishable key');
 }
-
-async function setSecureItem(key: string, value: string): Promise<void> {
-  const available = await isSecureStoreAvailable();
-  if (available) {
-    await SecureStore.setItemAsync(key, value);
-    return;
-  }
-  if (typeof window !== 'undefined' && window.localStorage) {
-    try {
-      window.localStorage.setItem(key, value);
-      return;
-    } catch {}
-  }
-  memoryStore.set(key, value);
-}
-
-async function getSecureItem(key: string): Promise<string | null> {
-  const available = await isSecureStoreAvailable();
-  if (available) {
-    return await SecureStore.getItemAsync(key);
-  }
-  if (typeof window !== 'undefined' && window.localStorage) {
-    try {
-      return window.localStorage.getItem(key);
-    } catch {}
-  }
-  return memoryStore.get(key) ?? null;
-}
-
-async function deleteSecureItem(key: string): Promise<void> {
-  const available = await isSecureStoreAvailable();
-  if (available) {
-    await SecureStore.deleteItemAsync(key);
-    return;
-  }
-  if (typeof window !== 'undefined' && window.localStorage) {
-    try {
-      window.localStorage.removeItem(key);
-      return;
-    } catch {}
-  }
-  memoryStore.delete(key);
-}
-
-function getDevEnvFallback(provider: AiProvider): string | null {
-  if (provider === 'gemini') {
-    const key = process.env.EXPO_PUBLIC_GEMINI_API_KEY?.trim();
-    if (key && key !== 'sua_chave_do_google_ai_studio_aqui') {
-      return key;
-    }
-  } else if (provider === 'groq') {
-    const key = process.env.EXPO_PUBLIC_GROQ_API_KEY?.trim();
-    if (key && key !== 'sua_chave_da_groq_cloud_aqui') {
-      return key;
-    }
-  }
-  return null;
-}
-
-function getDevEnvSupabaseFallback(): { url: string; anonKey: string } | null {
-  const url = process.env.EXPO_PUBLIC_SUPABASE_URL?.trim();
-  const anonKey = process.env.EXPO_PUBLIC_SUPABASE_KEY?.trim();
+export async function saveSupabaseCredentials(url: string, anonKey: string) {
+  const parsed = new URL(url.trim());
   if (
-    url &&
-    anonKey &&
-    url.length > 0 &&
-    anonKey.length > 0 &&
-    !url.includes('sua_url_do_supabase') &&
-    !anonKey.includes('sua_anon_key')
-  ) {
-    return {
-      url: url.replace(/\/+$/, ''),
-      anonKey,
-    };
-  }
+    parsed.protocol !== 'https:' &&
+    !(
+      ['localhost', '127.0.0.1'].includes(parsed.hostname) &&
+      parsed.protocol === 'http:'
+    )
+  )
+    throw new Error('Use HTTPS');
+  if (
+    parsed.username ||
+    parsed.password ||
+    parsed.search ||
+    parsed.hash ||
+    parsed.pathname !== '/' ||
+    !anonKey.trim()
+  )
+    throw new Error('Invalid project URL or public key');
+  assertPublicSupabaseKey(anonKey.trim());
+  await setSecureItem('secure_supabase_url', parsed.origin);
+  await setSecureItem('secure_supabase_anon_key', anonKey.trim());
+  listeners.forEach((fn) => fn());
+}
+export async function unlinkSupabaseCredentials() {
+  await setSecureItem('secure_supabase_url', '__UNLINKED__');
+  await deleteSecureItem('secure_supabase_anon_key');
+  listeners.forEach((fn) => fn());
+}
+export async function getSupabaseCredentialsForService() {
+  const stored = await getSecureItem('secure_supabase_url');
+  if (stored === '__UNLINKED__') return null;
+  const url = stored ?? process.env.EXPO_PUBLIC_SUPABASE_URL?.trim();
+  const anonKey =
+    (await getSecureItem('secure_supabase_anon_key')) ??
+    process.env.EXPO_PUBLIC_SUPABASE_KEY?.trim();
+  if (!url || !anonKey) return null;
+  assertPublicSupabaseKey(anonKey);
+  return { url, anonKey };
+}
+// Legacy calls cannot read or send private provider keys anymore.
+export async function saveApiKey(
+  _provider: AiProvider,
+  _key: string,
+): Promise<void> {
+  throw new Error('Configure provider secrets on the server');
+}
+export async function unlinkApiKey(provider: AiProvider) {
+  await deleteSecureItem(`secure_${provider}_api_key`);
+}
+export async function getApiKeyForService(
+  _provider: AiProvider,
+): Promise<string | null> {
   return null;
 }
-
-/**
- * Salva a API Key no cofre criptografado com .trim().
- */
-export async function saveApiKey(provider: AiProvider, key: string): Promise<void> {
-  const trimmed = key.trim();
-  if (!trimmed) {
-    await unlinkApiKey(provider);
-    return;
-  }
-  await setSecureItem(SECURE_KEYS[provider], trimmed);
+export async function saveLastSyncTimestamp(value: string) {
+  await setSecureItem('secure_supabase_last_sync_at', value);
 }
-
-/**
- * Desvincula a API Key do SecureStore imediatamente.
- */
-export async function unlinkApiKey(provider: AiProvider): Promise<void> {
-  const devEnv = getDevEnvFallback(provider);
-  if (devEnv) {
-    await setSecureItem(SECURE_KEYS[provider], UNLINKED_SENTINEL);
-  } else {
-    await deleteSecureItem(SECURE_KEYS[provider]);
-  }
+export async function getLastSyncTimestamp() {
+  return getSecureItem('secure_supabase_last_sync_at');
 }
-
-/**
- * USO EXCLUSIVO INTERNO DOS SERVICES DE IA.
- */
-export async function getApiKeyForService(provider: AiProvider): Promise<string | null> {
-  const stored = await getSecureItem(SECURE_KEYS[provider]);
-  if (stored === UNLINKED_SENTINEL) {
-    return null;
-  }
-  if (stored && stored.trim().length > 0) {
-    return stored.trim();
-  }
-  return getDevEnvFallback(provider);
-}
-
-/**
- * Salva as credenciais do Supabase no cofre criptografado.
- * Normaliza a URL com .trim() e remove a barra final se houver.
- */
-export async function saveSupabaseCredentials(url: string, anonKey: string): Promise<void> {
-  const trimmedUrl = url.trim().replace(/\/+$/, '');
-  const trimmedKey = anonKey.trim();
-
-  if (!trimmedUrl || !trimmedKey) {
-    await unlinkSupabaseCredentials();
-    return;
-  }
-
-  await Promise.all([
-    setSecureItem(SECURE_SUPABASE_URL, trimmedUrl),
-    setSecureItem(SECURE_SUPABASE_ANON_KEY, trimmedKey),
-  ]);
-
-  notifyCredentialsChanged();
-}
-
-/**
- * Desvincula o Supabase do SecureStore e reseta registros de sincronização.
- */
-export async function unlinkSupabaseCredentials(): Promise<void> {
-  const devEnv = getDevEnvSupabaseFallback();
-  if (devEnv) {
-    await Promise.all([
-      setSecureItem(SECURE_SUPABASE_URL, UNLINKED_SENTINEL),
-      setSecureItem(SECURE_SUPABASE_ANON_KEY, UNLINKED_SENTINEL),
-      deleteSecureItem(SECURE_SUPABASE_LAST_SYNC_AT),
-    ]);
-  } else {
-    await Promise.all([
-      deleteSecureItem(SECURE_SUPABASE_URL),
-      deleteSecureItem(SECURE_SUPABASE_ANON_KEY),
-      deleteSecureItem(SECURE_SUPABASE_LAST_SYNC_AT),
-    ]);
-  }
-
-  notifyCredentialsChanged();
-}
-
-/**
- * USO EXCLUSIVO INTERNO DE supabase.ts e sync.service.ts.
- * Retorna a URL e Anon Key do Supabase ou null se desvinculado/não configurado.
- */
-export async function getSupabaseCredentialsForService(): Promise<{ url: string; anonKey: string } | null> {
-  const [url, anonKey] = await Promise.all([
-    getSecureItem(SECURE_SUPABASE_URL),
-    getSecureItem(SECURE_SUPABASE_ANON_KEY),
-  ]);
-
-  if (url === UNLINKED_SENTINEL || anonKey === UNLINKED_SENTINEL) {
-    return null;
-  }
-
-  if (url && anonKey && url.trim().length > 0 && anonKey.trim().length > 0) {
-    return {
-      url: url.trim().replace(/\/+$/, ''),
-      anonKey: anonKey.trim(),
-    };
-  }
-
-  return getDevEnvSupabaseFallback();
-}
-
-/**
- * Salva o timestamp ISO da última sincronização com sucesso.
- */
-export async function saveLastSyncTimestamp(isoTimestamp: string): Promise<void> {
-  await setSecureItem(SECURE_SUPABASE_LAST_SYNC_AT, isoTimestamp);
-}
-
-/**
- * Obtém o timestamp ISO da última sincronização bem-sucedida.
- */
-export async function getLastSyncTimestamp(): Promise<string | null> {
-  return await getSecureItem(SECURE_SUPABASE_LAST_SYNC_AT);
-}
-
-/**
- * USO DA UI.
- * Retorna APENAS booleanos indicando se os serviços estão vinculados ou não.
- * Garante que a UI jamais leia ou exponha o valor real das credenciais salvas.
- */
 export async function getApiKeysStatus(): Promise<ApiKeysStatus> {
-  const [geminiKey, groqKey, supabaseCreds, lastSyncAt] = await Promise.all([
-    getApiKeyForService('gemini'),
-    getApiKeyForService('groq'),
-    getSupabaseCredentialsForService(),
-    getLastSyncTimestamp(),
-  ]);
-
   return {
-    hasGeminiKey: Boolean(geminiKey && geminiKey.trim().length > 0),
-    hasGroqKey: Boolean(groqKey && groqKey.trim().length > 0),
-    hasSupabaseLinked: Boolean(supabaseCreds && supabaseCreds.url && supabaseCreds.anonKey),
-    lastSyncAt: lastSyncAt || null,
+    hasGeminiKey: false,
+    hasGroqKey: false,
+    hasSupabaseLinked: !!(await getSupabaseCredentialsForService()),
+    lastSyncAt: await getLastSyncTimestamp(),
   };
 }
-
 export const apiKeysService = {
   saveApiKey,
   unlinkApiKey,

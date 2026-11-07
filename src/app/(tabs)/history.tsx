@@ -7,12 +7,16 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
 
 import { HistoryEmptyState } from '@/components/history/HistoryEmptyState';
 import { HistoryFiltersBar } from '@/components/history/HistoryFiltersBar';
 import { HistoryLogItemCard } from '@/components/history/HistoryLogItemCard';
 import { HistorySectionHeader } from '@/components/history/HistorySectionHeader';
+import { Note } from '@/components/ui/Form';
 import { Typography } from '@/components/ui/Typography';
 import { useLanguage } from '@/context/LanguageContext';
 import { useLogsHistory } from '@/hooks/useLogsHistory';
@@ -21,7 +25,7 @@ import { colors, radii, spacing } from '@/theme/tokens';
 
 export default function HistoryScreen() {
   const insets = useSafeAreaInsets();
-  const { t } = useLanguage();
+  const { t, isPt } = useLanguage();
 
   const {
     items,
@@ -38,6 +42,9 @@ export default function HistoryScreen() {
     clearFilters,
     deleteItem,
     refresh,
+    loadMore,
+    loadingMore,
+    error,
   } = useLogsHistory();
 
   const handleEdit = (item: UnifiedLogItem) => {
@@ -53,7 +60,11 @@ export default function HistoryScreen() {
       {/* 1. Header Fixo Superior */}
       <View style={styles.header}>
         <View style={styles.headerTitles}>
-          <Typography variant="unitCaption" color={colors.primary} style={styles.tagline}>
+          <Typography
+            variant="unitCaption"
+            color={colors.primary}
+            style={styles.tagline}
+          >
             {t.history.headerSubtitle}
           </Typography>
           <Typography variant="headlineSm" style={styles.title}>
@@ -63,7 +74,11 @@ export default function HistoryScreen() {
 
         {items.length > 0 && (
           <View style={styles.countBadge}>
-            <Typography variant="unitCaption" color={colors.primary} style={styles.countText}>
+            <Typography
+              variant="unitCaption"
+              color={colors.primary}
+              style={styles.countText}
+            >
               {t.history.totalEntries(items.length)}
             </Typography>
           </View>
@@ -92,13 +107,33 @@ export default function HistoryScreen() {
           />
         )}
         renderSectionHeader={({ section }) => (
-          <HistorySectionHeader
-            title={section.title}
-            totalProteinG={section.totalProteinG}
-            totalCaloriesKcal={section.totalCaloriesKcal}
-            totalWaterMl={section.totalWaterMl}
-          />
+          <View>
+            <HistorySectionHeader
+              title={section.title}
+              totalProteinG={section.totalProteinG}
+              totalCaloriesKcal={section.totalCaloriesKcal}
+              totalWaterMl={section.totalWaterMl}
+            />
+            <Note>
+              {isPt
+                ? 'Subtotal conhecido dos registros carregados. Campos desconhecidos não entram na soma.'
+                : 'Known subtotal of loaded entries. Unknown fields are not included in sums.'}
+            </Note>
+          </View>
         )}
+        onEndReached={loadMore}
+        onEndReachedThreshold={0.4}
+        ListFooterComponent={
+          loadingMore ? (
+            <ActivityIndicator color={colors.primary} />
+          ) : error ? (
+            <Typography color={colors.error}>{error}</Typography>
+          ) : (
+            <Typography color={colors.onSurfaceVariant}>
+              {t.history.headerSubtitle}
+            </Typography>
+          )
+        }
         stickySectionHeadersEnabled={false}
         contentContainerStyle={[
           styles.listContent,

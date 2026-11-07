@@ -2,10 +2,10 @@ import { isRunningInExpoGo } from 'expo';
 import { DarkTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import React, { useEffect } from 'react';
+import React, { useEffect, useSyncExternalStore } from 'react';
 
 // Side-effect: abre o SQLite e roda migrations + seed de forma síncrona.
-import '@/db/client';
+import { getDatabaseScope, subscribeDatabaseScope } from '@/db/client';
 import { LanguageProvider } from '@/context/LanguageContext';
 import { syncEngine } from '@/sync/sync.service';
 import { colors } from '@/theme/tokens';
@@ -34,6 +34,11 @@ const customDarkTheme = {
 };
 
 export default function RootLayout() {
+  const scope = useSyncExternalStore(
+    subscribeDatabaseScope,
+    getDatabaseScope,
+    getDatabaseScope,
+  );
   useEffect(() => {
     syncEngine.start();
     SplashScreen.hideAsync();
@@ -41,10 +46,14 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <LanguageProvider>
+    <LanguageProvider key={scope}>
       <ThemeProvider value={customDarkTheme}>
         <StatusBar style="light" />
         <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen
+            name="add-routine"
+            options={{ presentation: 'modal' }}
+          />
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen
             name="add-log-modal"

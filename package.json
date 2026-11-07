@@ -1,6 +1,6 @@
 {
   "name": "fit-tracker",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "main": "expo-router/entry",
   "dependencies": {
     "@expo/ui": "~58.0.22",
@@ -13,6 +13,8 @@
     "expo-crypto": "~58.0.7",
     "expo-dev-client": "~58.0.14",
     "expo-device": "~58.0.5",
+    "expo-document-picker": "~58.0.4",
+    "expo-file-system": "~58.0.13",
     "expo-font": "~58.0.9",
     "expo-glass-effect": "~58.0.4",
     "expo-image": "~58.0.16",
@@ -20,6 +22,7 @@
     "expo-linking": "~58.0.14",
     "expo-router": "~58.0.25",
     "expo-secure-store": "~58.0.2",
+    "expo-sharing": "~58.0.22",
     "expo-splash-screen": "~58.0.11",
     "expo-sqlite": "~58.0.13",
     "expo-status-bar": "~58.0.4",
@@ -50,7 +53,11 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "typecheck": "tsc --noEmit",
+    "test": "TZ=America/Sao_Paulo node --test --test-isolation=none tests/nutrition.test.cjs tests/local-data.test.cjs tests/sync.test.cjs tests/ai.test.cjs",
+    "test:postgres": "bash tests/run-postgres-tests.sh",
+    "bench:local": "node scripts/benchmark-local.cjs"
   },
   "private": true
 }

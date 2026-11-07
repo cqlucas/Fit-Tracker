@@ -7,15 +7,12 @@ import {
   Utensils,
 } from 'lucide-react-native';
 import React, { useState } from 'react';
-import {
-  Alert,
-  Pressable,
-  StyleSheet,
-  View,
-} from 'react-native';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
 
+import { useNumberFormat } from '@/components/ui/Form';
 import { Typography } from '@/components/ui/Typography';
 import { useLanguage } from '@/context/LanguageContext';
+import { v2Translations } from '@/i18n/translations';
 import { MealWindow } from '@/db/schema';
 import { UnifiedLogItem } from '@/repositories/logs.repository';
 import { colors, radii, shadows, spacing } from '@/theme/tokens';
@@ -26,8 +23,13 @@ export interface HistoryLogItemCardProps {
   onEdit?: (item: UnifiedLogItem) => void;
 }
 
-export function HistoryLogItemCard({ item, onDelete, onEdit }: HistoryLogItemCardProps) {
-  const { t, isPt } = useLanguage();
+export function HistoryLogItemCard({
+  item,
+  onDelete,
+  onEdit,
+}: HistoryLogItemCardProps) {
+  const { t, isPt, language } = useLanguage();
+  const format = useNumberFormat();
 
   const formatTime = (isoString: string): string => {
     try {
@@ -56,7 +58,11 @@ export function HistoryLogItemCard({ item, onDelete, onEdit }: HistoryLogItemCar
   const handleDeletePress = () => {
     Alert.alert(
       t.history.deleteTitle,
-      t.history.deleteConfirm,
+      item.type === 'water' && item.foodLogId
+        ? isPt
+          ? 'A bebida está vinculada à refeição. Excluir remove o conjunto (nutrientes e volume).'
+          : 'This drink is linked to a meal. Deleting removes both nutrients and volume.'
+        : t.history.deleteConfirm,
       [
         {
           text: t.history.cancel,
@@ -67,7 +73,7 @@ export function HistoryLogItemCard({ item, onDelete, onEdit }: HistoryLogItemCar
           style: 'destructive',
           onPress: () => onDelete(item.id, item.type),
         },
-      ]
+      ],
     );
   };
 
@@ -82,7 +88,8 @@ export function HistoryLogItemCard({ item, onDelete, onEdit }: HistoryLogItemCar
         style={({ pressed }) => [
           styles.card,
           onEdit && pressed && styles.cardPressed,
-        ]}>
+        ]}
+      >
         <View style={styles.leftRow}>
           {/* Thumbnail da Comida ou Ícone Fallback */}
           <View style={[styles.iconBox, styles.foodIconBox]}>
@@ -107,20 +114,31 @@ export function HistoryLogItemCard({ item, onDelete, onEdit }: HistoryLogItemCar
               variant="labelMd"
               style={styles.itemTitle}
               numberOfLines={1}
-              ellipsizeMode="tail">
+              ellipsizeMode="tail"
+            >
               {item.name}
             </Typography>
 
+            <Typography variant="labelSm" color={colors.onSurfaceVariant}>
+              {`${isPt ? 'Carb.' : 'Carbs'} ${format(item.carbG)} g · ${isPt ? 'Gord.' : 'Fat'} ${format(item.fatG)} g · ${isPt ? 'Fibras' : 'Fiber'} ${format(item.fiberG)} g`}
+            </Typography>
+            <Typography variant="labelSm" color={colors.onSurfaceVariant}>
+              {`${v2Translations[language].sources[item.nutritionSource]}${item.isEstimate ? ' · ' + (isPt ? 'estimativa' : 'estimate') : ''}${item.portionAmount !== null ? ' · ' + format(item.portionAmount) + ' ' + item.portionUnit : ''}`}
+            </Typography>
             <View style={styles.metaRow}>
               {/* Badge da Janela de Refeição */}
               <View style={styles.mealBadge}>
-                <Typography variant="unitCaption" color={colors.primary} style={styles.badgeText}>
+                <Typography
+                  variant="unitCaption"
+                  color={colors.primary}
+                  style={styles.badgeText}
+                >
                   {getMealWindowLabel(item.mealWindow).toUpperCase()}
                 </Typography>
               </View>
 
               <Typography variant="unitCaption" color={colors.onSurfaceVariant}>
-                {formatTime(item.createdAt)}
+                {formatTime(item.occurredAt)}
               </Typography>
             </View>
           </View>
@@ -130,8 +148,12 @@ export function HistoryLogItemCard({ item, onDelete, onEdit }: HistoryLogItemCar
         <View style={styles.rightGroup}>
           <View style={styles.macrosCol}>
             <View style={styles.macroPill}>
-              <Typography variant="metricNumeralSm" color={colors.primary} style={styles.macroValue}>
-                {item.proteinG}g
+              <Typography
+                variant="metricNumeralSm"
+                color={colors.primary}
+                style={styles.macroValue}
+              >
+                {format(item.proteinG)}g
               </Typography>
               <Typography variant="unitCaption" color={colors.onSurfaceVariant}>
                 {isPt ? 'prot' : 'pro'}
@@ -139,8 +161,12 @@ export function HistoryLogItemCard({ item, onDelete, onEdit }: HistoryLogItemCar
             </View>
 
             <View style={styles.macroPill}>
-              <Typography variant="labelSm" color={colors.tertiary} style={styles.calorieValue}>
-                {item.caloriesKcal}
+              <Typography
+                variant="labelSm"
+                color={colors.tertiary}
+                style={styles.calorieValue}
+              >
+                {format(item.caloriesKcal)}
               </Typography>
               <Typography variant="unitCaption" color={colors.onSurfaceVariant}>
                 kcal
@@ -156,7 +182,11 @@ export function HistoryLogItemCard({ item, onDelete, onEdit }: HistoryLogItemCar
                 accessibilityRole="button"
                 accessibilityLabel={t.history.edit}
                 hitSlop={6}
-                style={({ pressed }) => [styles.actionBtn, pressed && styles.pressed]}>
+                style={({ pressed }) => [
+                  styles.actionBtn,
+                  pressed && styles.pressed,
+                ]}
+              >
                 <Pencil size={15} color={colors.onSurfaceVariant} />
               </Pressable>
             )}
@@ -166,7 +196,11 @@ export function HistoryLogItemCard({ item, onDelete, onEdit }: HistoryLogItemCar
               accessibilityRole="button"
               accessibilityLabel={t.history.delete}
               hitSlop={6}
-              style={({ pressed }) => [styles.actionBtn, pressed && styles.pressed]}>
+              style={({ pressed }) => [
+                styles.actionBtn,
+                pressed && styles.pressed,
+              ]}
+            >
               <Trash2 size={15} color={colors.error || '#ffb4ab'} />
             </Pressable>
           </View>
@@ -182,7 +216,8 @@ export function HistoryLogItemCard({ item, onDelete, onEdit }: HistoryLogItemCar
       style={({ pressed }) => [
         styles.card,
         onEdit && pressed && styles.cardPressed,
-      ]}>
+      ]}
+    >
       <View style={styles.leftRow}>
         {/* Ícone de Água */}
         <View style={[styles.iconBox, styles.waterIconBox]}>
@@ -191,19 +226,27 @@ export function HistoryLogItemCard({ item, onDelete, onEdit }: HistoryLogItemCar
 
         {/* Dados Textuais */}
         <View style={styles.detailsCol}>
-          <Typography variant="labelMd" style={styles.itemTitle} numberOfLines={1}>
+          <Typography
+            variant="labelMd"
+            style={styles.itemTitle}
+            numberOfLines={1}
+          >
             {t.history.waterTitle}
           </Typography>
 
           <View style={styles.metaRow}>
             <View style={styles.waterBadge}>
-              <Typography variant="unitCaption" color={colors.secondary} style={styles.badgeText}>
+              <Typography
+                variant="unitCaption"
+                color={colors.secondary}
+                style={styles.badgeText}
+              >
                 H2O
               </Typography>
             </View>
 
             <Typography variant="unitCaption" color={colors.onSurfaceVariant}>
-              {formatTime(item.createdAt)}
+              {formatTime(item.occurredAt)}
             </Typography>
           </View>
         </View>
@@ -212,7 +255,11 @@ export function HistoryLogItemCard({ item, onDelete, onEdit }: HistoryLogItemCar
       {/* Lado Direito: Volume e Ações */}
       <View style={styles.rightGroup}>
         <View style={styles.waterAmountBox}>
-          <Typography variant="metricNumeralSm" color={colors.secondary} style={styles.waterNumber}>
+          <Typography
+            variant="metricNumeralSm"
+            color={colors.secondary}
+            style={styles.waterNumber}
+          >
             +{item.amountMl}
           </Typography>
           <Typography variant="unitCaption" color={colors.secondaryFixedDim}>
@@ -228,7 +275,11 @@ export function HistoryLogItemCard({ item, onDelete, onEdit }: HistoryLogItemCar
               accessibilityRole="button"
               accessibilityLabel={t.history.edit}
               hitSlop={6}
-              style={({ pressed }) => [styles.actionBtn, pressed && styles.pressed]}>
+              style={({ pressed }) => [
+                styles.actionBtn,
+                pressed && styles.pressed,
+              ]}
+            >
               <Pencil size={15} color={colors.onSurfaceVariant} />
             </Pressable>
           )}
@@ -238,7 +289,11 @@ export function HistoryLogItemCard({ item, onDelete, onEdit }: HistoryLogItemCar
             accessibilityRole="button"
             accessibilityLabel={t.history.delete}
             hitSlop={6}
-            style={({ pressed }) => [styles.actionBtn, pressed && styles.pressed]}>
+            style={({ pressed }) => [
+              styles.actionBtn,
+              pressed && styles.pressed,
+            ]}
+          >
             <Trash2 size={15} color={colors.error || '#ffb4ab'} />
           </Pressable>
         </View>
@@ -360,6 +415,8 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   actionBtn: {
+    minWidth: 44,
+    minHeight: 44,
     width: 32,
     height: 32,
     borderRadius: radii.full,
@@ -372,4 +429,3 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.92 }],
   },
 });
-

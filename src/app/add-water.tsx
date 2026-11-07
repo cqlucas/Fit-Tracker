@@ -1,321 +1,144 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState } from 'react';
+import { Alert, View } from 'react-native';
 import {
-  Alert,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-
+  Action,
+  Field,
+  Note,
+  Panel,
+  Screen,
+  formStyles,
+} from '@/components/ui/Form';
 import { OptionalDateTimePicker } from '@/components/ui/OptionalDateTimePicker';
-import { Typography } from '@/components/ui/Typography';
-import { HydrationImpactBar } from '@/components/water/HydrationImpactBar';
-import { QuickWaterPresets } from '@/components/water/QuickWaterPresets';
-import { SaveWaterButton } from '@/components/water/SaveWaterButton';
-import { WaterAmountCounter } from '@/components/water/WaterAmountCounter';
-import { WaterHeader } from '@/components/water/WaterHeader';
-import { WaterVesselVisual } from '@/components/water/WaterVesselVisual';
 import { useLanguage } from '@/context/LanguageContext';
-import { goalsRepository } from '@/repositories/goals.repository';
+import { parseDecimal } from '@/domain/nutrition';
 import { logsRepository } from '@/repositories/logs.repository';
 import { syncEngine } from '@/sync/sync.service';
-import { colors, radii, shadows, spacing } from '@/theme/tokens';
-import { toDateKey } from '@/utils/date';
-
+import { v2Translations } from '@/i18n/translations';
 export default function AddWaterScreen() {
-  const insets = useSafeAreaInsets();
-  const { isPt } = useLanguage();
   const { id } = useLocalSearchParams<{ id?: string }>();
-  const isEditMode = Boolean(id);
-
-  // Estados locais do formulário de água
-  const [intakeVolume, setIntakeVolume] = useState(500);
-  const [existingDateKey, setExistingDateKey] = useState<string | undefined>(undefined);
-  const [customDateTime, setCustomDateTime] = useState<Date | null>(null);
-  const [originalLogAmount, setOriginalLogAmount] = useState<number | null>(null);
-  const [baseTodayConsumed, setBaseTodayConsumed] = useState(0);
-  const [dailyWaterGoal, setDailyWaterGoal] = useState(3000);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isSaved, setIsSaved] = useState(false);
-
-  // Carrega registro existente se for modo de edição
+  const { isPt, language } = useLanguage();
+  const t = v2Translations[language];
+  const [amount, setAmount] = useState('250'),
+    [category, setCategory] = useState('water'),
+    [at, setAt] = useState<Date | null>(null),
+    [day, setDay] = useState<string | undefined>(),
+    [saving, setSaving] = useState(false),
+    [error, setError] = useState('');
   useEffect(() => {
-    if (!id) return;
-    let isMounted = true;
-    async function loadWaterLog() {
-      try {
-        const log = await logsRepository.getWaterLogById(id!);
-        if (log && isMounted) {
-          setIntakeVolume(log.amountMl);
-          setExistingDateKey(log.dateKey);
-          setOriginalLogAmount(log.amountMl);
-          if (log.createdAt) {
-            setCustomDateTime(new Date(log.createdAt));
-          }
+    let live = true;
+    if (id)
+      void logsRepository.getWaterLogById(id).then((row) => {
+        if (!row || !live) return;
+        if (row.foodLogId) {
+          router.replace({
+            pathname: '/add-food',
+            params: { id: row.foodLogId },
+          });
+          return;
         }
-      } catch (err) {
-        console.warn('[AddWater] Erro ao carregar registro para edição:', err);
-      }
-    }
-    loadWaterLog();
+        setAmount(String(row.amountMl));
+        setCategory(row.category);
+        setAt(new Date(row.occurredAt));
+        setDay(row.dateKey);
+      });
     return () => {
-      isMounted = false;
+      live = false;
     };
   }, [id]);
-
-  // Carrega consumo real do dia e meta para o cálculo de telemetria
-  useEffect(() => {
-    let isMounted = true;
-    async function loadHydrationTelemetry() {
-      try {
-        const today = toDateKey();
-        const [summary, goals] = await Promise.all([
-          logsRepository.getDailySummary(today),
-          goalsRepository.getGoals(),
-        ]);
-        if (isMounted) {
-          setBaseTodayConsumed(summary.water.consumed);
-          setDailyWaterGoal(goals.waterGoal);
-        }
-      } catch (err) {
-        console.warn('[AddWater] Erro ao carregar dados de telemetria:', err);
-      }
-    }
-    loadHydrationTelemetry();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  // Em modo de edição de um registro do dia de hoje, subtrai o valor original para evitar dupla contagem
-  const effectiveBaseConsumed = React.useMemo(() => {
-    const isLogFromToday = !existingDateKey || existingDateKey === toDateKey();
-    if (isEditMode && isLogFromToday && originalLogAmount !== null) {
-      return Math.max(0, baseTodayConsumed - originalLogAmount);
-    }
-    return baseTodayConsumed;
-  }, [isEditMode, existingDateKey, originalLogAmount, baseTodayConsumed]);
-
-  const handleIncrement = () => {
-    setIntakeVolume((prev) => Math.min(prev + 50, 2500));
-  };
-
-  const handleDecrement = () => {
-    setIntakeVolume((prev) => Math.max(prev - 50, 50));
-  };
-
-  const handleSave = async () => {
-    if (isLoading || isSaved) return;
-
-    if (!intakeVolume || intakeVolume <= 0 || !Number.isInteger(intakeVolume)) {
-      Alert.alert(
-        isPt ? 'Quantidade Inválida' : 'Invalid Amount',
-        isPt
-          ? 'Por favor, selecione uma quantidade de água maior que zero.'
-          : 'Please select an amount of water greater than zero.'
-      );
-      return;
-    }
-
-    setIsLoading(true);
-
+  const save = async (preset?: number) => {
+    if (saving) return;
+    setSaving(true);
+    setError('');
     try {
-      if (isEditMode && id) {
-        await logsRepository.updateWaterLog(id, {
-          amountMl: intakeVolume,
-          dateKey: customDateTime ? toDateKey(customDateTime) : existingDateKey,
-          ingestedAt: customDateTime,
-        });
-      } else {
-        await logsRepository.addWater({
-          amountMl: intakeVolume,
-          dateKey: customDateTime ? toDateKey(customDateTime) : toDateKey(),
-          ingestedAt: customDateTime,
-        });
-      }
-
-      // Sincronização em background fire-and-forget
+      const value = preset ?? parseDecimal(amount);
+      if (value == null)
+        throw new Error(isPt ? 'Informe o volume' : 'Enter volume');
+      const input = {
+        amountMl: value,
+        category: preset ? 'water' : category,
+        ingestedAt: at,
+        dateKey: day,
+      };
+      if (id) await logsRepository.updateWaterLog(id, input);
+      else await logsRepository.addWater(input);
       syncEngine.requestSync(0);
-
-      setIsSaved(true);
-
-      setTimeout(() => {
-        if (router.canGoBack()) {
-          router.back();
-        } else {
-          router.replace('/(tabs)');
-        }
-      }, 700);
-    } catch (err: any) {
-      console.error('[AddWater] Falha ao salvar registro de água:', err);
-      Alert.alert(
-        isPt ? 'Erro ao Salvar' : 'Failed to Save',
-        isPt
-          ? 'Ocorreu um erro ao salvar a água no banco de dados local.'
-          : 'An error occurred while saving the water intake to local database.'
-      );
-      setIsLoading(false);
+      Alert.alert(t.saved);
+      router.back();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error');
+    } finally {
+      setSaving(false);
     }
   };
-
-  const screenTitle = isEditMode
-    ? isPt
-      ? 'Editar Registro de Água'
-      : 'Edit Water Log'
-    : isPt
-    ? 'Registrar Água'
-    : 'Quick Log';
-
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[
-          styles.contentContainer,
-          { paddingBottom: Math.max(insets.bottom + 24, spacing.xl) },
-        ]}
-        showsVerticalScrollIndicator={false}>
-        {/* Cabeçalho superior com botão voltar */}
-        <WaterHeader title={screenTitle} />
-
-        {/* Console Card de Hidratação com Glow e Glass Visual */}
-        <View style={styles.consoleCard}>
-          {/* Ambient Photonic Glow */}
-          <View style={styles.ambientGlow} />
-
-          {/* Sheet Handle Decorator */}
-          <View style={styles.handleRow}>
-            <View style={styles.handle} />
-          </View>
-
-          {/* Sub Header */}
-          <View style={styles.subHeader}>
-            <Typography variant="unitCaption" color={colors.secondary} style={styles.tagline}>
-              {isEditMode
-                ? isPt
-                  ? 'MODO DE EDIÇÃO'
-                  : 'EDIT MODE'
-                : isPt
-                ? 'RASTREAMENTO RÁPIDO'
-                : 'FAST TRACKING'}
-            </Typography>
-            <Typography variant="headlineSm" style={styles.consoleTitle}>
-              {isPt ? 'Consumo de Água Pura' : 'Pure Water Intake'}
-            </Typography>
-          </View>
-
-          {/* Garrafa / Vaso com nível de líquido animado em SVG */}
-          <WaterVesselVisual
-            volume={intakeVolume}
-            consumedToday={effectiveBaseConsumed}
-            waterGoal={dailyWaterGoal}
-            isPt={isPt}
-          />
-
-          {/* Contador Numérico Gigante com botões +/- 50ml */}
-          <WaterAmountCounter
-            amount={intakeVolume}
-            onIncrement={handleIncrement}
-            onDecrement={handleDecrement}
-            isPt={isPt}
-          />
-
-          {/* Atalhos Táteis de Snapping (+250ml, +500ml, +750ml, +1000ml) */}
-          <QuickWaterPresets
-            currentAmount={intakeVolume}
-            onSelectAmount={setIntakeVolume}
-            isPt={isPt}
-          />
-
-          {/* Barra de Impacto Projetado na Hidratação Diária */}
-          <HydrationImpactBar
-            baseConsumed={effectiveBaseConsumed}
-            addedAmount={intakeVolume}
-            goal={dailyWaterGoal}
-            isPt={isPt}
-          />
+    <Screen title={t.liquids} back>
+      <Panel title={isPt ? 'Água rápida' : 'Quick water'}>
+        <View style={formStyles.row}>
+          {[250, 500, 750, 1000].map((n) => (
+            <Action
+              key={n}
+              label={`+ ${n} mL`}
+              busy={saving}
+              onPress={() => void save(n)}
+            />
+          ))}
         </View>
-
-        {/* Seletor Opcional de Data e Horário da Ingestão */}
+        <Note>
+          {isPt
+            ? 'Cada atalho salva água no aparelho. Não é necessário atingir a referência à força.'
+            : 'Each shortcut saves water locally. There is no need to force yourself to reach the reference.'}
+        </Note>
+      </Panel>
+      <Panel title={isPt ? 'Outro volume' : 'Custom volume'}>
+        <Field
+          label="mL"
+          value={amount}
+          onChangeText={setAmount}
+          keyboardType="number-pad"
+        />
+        <View style={formStyles.row}>
+          {[
+            ['water', isPt ? 'Água' : 'Water'],
+            ['tea', isPt ? 'Chá sem açúcar' : 'Unsweetened tea'],
+            ['coffee', isPt ? 'Café sem açúcar' : 'Black coffee'],
+            ['other', isPt ? 'Outro sem calorias' : 'Other noncaloric'],
+          ].map(([key, label]) => (
+            <Action
+              key={key}
+              label={`${category === key ? '✓ ' : ''}${label}`}
+              secondary
+              onPress={() => setCategory(key)}
+            />
+          ))}
+        </View>
         <OptionalDateTimePicker
-          value={customDateTime}
-          onChange={setCustomDateTime}
+          value={at}
+          onChange={setAt}
           isPt={isPt}
-          isEditMode={isEditMode}
+          isEditMode={!!id}
         />
-
-        {/* Botão de Ação: Salvar Água */}
-        <SaveWaterButton
-          onPress={handleSave}
-          amount={intakeVolume}
-          isLoading={isLoading}
-          isSaved={isSaved}
-          isPt={isPt}
-          isEditMode={isEditMode}
+        <Action label={t.save} busy={saving} onPress={() => void save()} />
+      </Panel>
+      <Panel
+        title={isPt ? 'Vitamina, leite ou shake?' : 'Smoothie, milk or shake?'}
+      >
+        <Note>
+          {isPt
+            ? 'Registre na refeição, com nutrientes e volume vinculado, para contar o líquido uma vez.'
+            : 'Use a meal with nutrients and linked volume to count the fluid once.'}
+        </Note>
+        <Action
+          label={
+            isPt
+              ? 'Registrar bebida com nutrientes'
+              : 'Log drink with nutrients'
+          }
+          secondary
+          onPress={() => router.replace('/add-food')}
         />
-      </ScrollView>
-    </SafeAreaView>
+      </Panel>
+      {error && <Note error>{error}</Note>}
+    </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  contentContainer: {
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.xs,
-    paddingBottom: spacing.xl,
-    gap: spacing.md,
-  },
-  consoleCard: {
-    width: '100%',
-    backgroundColor: colors.surfaceLow,
-    borderRadius: radii['2xl'],
-    padding: spacing.md,
-    position: 'relative',
-    overflow: 'hidden',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.strokeCrisp,
-    ...shadows.card,
-  },
-  ambientGlow: {
-    position: 'absolute',
-    top: -48,
-    right: -48,
-    width: 192,
-    height: 192,
-    borderRadius: radii.full,
-    backgroundColor: 'rgba(76, 215, 246, 0.08)',
-  },
-  handleRow: {
-    width: '100%',
-    alignItems: 'center',
-    paddingBottom: spacing.xs,
-    paddingTop: 4,
-  },
-  handle: {
-    width: 40,
-    height: 5,
-    borderRadius: radii.full,
-    backgroundColor: colors.surfaceHighest,
-  },
-  subHeader: {
-    width: '100%',
-    marginBottom: spacing.md,
-  },
-  tagline: {
-    letterSpacing: 1.2,
-    fontWeight: '800',
-    marginBottom: 2,
-  },
-  consoleTitle: {
-    fontWeight: '800',
-  },
-});
