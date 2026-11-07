@@ -1,62 +1,25 @@
 import NetInfo from '@react-native-community/netinfo';
-import { and, eq, sql } from 'drizzle-orm';
-import { addDatabaseChangeListener } from 'expo-sqlite';
-import Storage from 'expo-sqlite/kv-store';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { addDatabaseChangeListener, type SQLiteDatabase } from 'expo-sqlite';
 import { AppState } from 'react-native';
-
-import { db } from '@/db/client';
+import { activeOwner, expoDb, getDatabaseScope } from '@/db/client';
+import { SYNC_TABLES, type SyncTableName } from '@/db/schema';
+import { getPreference } from '@/repositories/preferences.repository';
+import { generateId } from '@/utils/id';
 import {
-  SYNC_TABLES,
-  foodLogs,
-  userGoals,
-  waterLogs,
-  type FoodLog,
-  type SyncTableName,
-  type UserGoals,
-  type WaterLog,
-} from '@/db/schema';
-
-import { isSupabaseConfigured, supabase } from './supabase';
-
-/**
- * SyncEngine — Local-First, Last-Write-Wins por `updated_at`.
- *
- *  PUSH: SELECT ... WHERE is_synced = 0 → supabase.upsert(onConflict: id)
- *        → UPDATE is_synced = 1 WHERE id = ? AND updated_at = <valor enviado>
- *        (a guarda em `updated_at` evita marcar como synced uma edição feita DURANTE o request).
- *
- *  PULL: SELECT * FROM remote WHERE server_updated_at > cursor
- *        → INSERT ... ON CONFLICT(id) DO UPDATE ... WHERE excluded.updated_at > local.updated_at
- *        Cursor em `server_updated_at` (relógio do Postgres) → imune a clock skew entre devices.
- *
- *  GATILHOS: boot, volta da conexão (NetInfo), app em foreground (AppState) e
- *            qualquer escrita local nas tabelas sincronizáveis (sqlite update hook, com debounce).
- */
-
-const PUSH_BATCH_SIZE = 200;
-const PULL_BATCH_SIZE = 500;
-const LOCAL_CHANGE_DEBOUNCE_MS = 1500;
-const CURSOR_KEY = (table: SyncTableName) => `sync:cursor:${table}`;
-const EPOCH = new Date(0).toISOString();
-
-type RemoteRow = Record<string, unknown> & { id: string; updated_at: string; server_updated_at: string };
-
-interface TableAdapter {
-  name: SyncTableName;
-  /** Lê até PUSH_BATCH_SIZE linhas sujas e devolve payload remoto + chave de confirmação. */
-  selectDirty(): Promise<{ payload: Record<string, unknown>[]; acks: Ack[] }>;
-  /** Marca como sincronizado somente se `updated_at` não mudou desde a leitura. */
-  markSynced(acks: Ack[]): void;
-  /** Aplica linhas remotas com LWW. */
-  applyRemote(rows: RemoteRow[]): void;
-  hasDirty(): boolean;
-}
-
-interface Ack {
-  id: string;
-  updatedAt: string;
-}
-
+  getAuthSession,
+  getDynamicSupabaseClient,
+  subscribeAuth,
+} from './supabase';
+import {
+  isSyncTable,
+  tableColumns,
+  toRemote,
+  validateRecord,
+  writeRaw,
+  type RawRecord,
+  type RemoteRecord,
+} from './records';
 export interface SyncResult {
   ok: boolean;
   pushed: Record<SyncTableName, number>;
@@ -64,390 +27,653 @@ export interface SyncResult {
   error?: string;
   finishedAt: string;
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Mapeamento local (camelCase + is_synced) ⇄ remoto (snake_case, sem is_synced)
-// ─────────────────────────────────────────────────────────────────────────────
-
-const goalsToRemote = (r: UserGoals) => ({
-  id: r.id,
-  protein_goal: r.proteinGoal,
-  water_goal: r.waterGoal,
-  calories_goal: r.caloriesGoal,
-  language: r.language,
-  updated_at: r.updatedAt,
-});
-
-const waterToRemote = (r: WaterLog) => ({
-  id: r.id,
-  amount_ml: r.amountMl,
-  date_key: r.dateKey,
-  created_at: r.createdAt,
-  updated_at: r.updatedAt,
-  deleted_at: r.deletedAt,
-});
-
-const foodToRemote = (r: FoodLog) => ({
-  id: r.id,
-  name: r.name,
-  protein_g: r.proteinG,
-  calories_kcal: r.caloriesKcal,
-  entry_method: r.entryMethod,
-  meal_window: r.mealWindow,
-  date_key: r.dateKey,
-  created_at: r.createdAt,
-  updated_at: r.updatedAt,
-  deleted_at: r.deletedAt,
-});
-
-const str = (v: unknown) => String(v);
-const num = (v: unknown) => Number(v);
-
-/** Normaliza timestamptz do Postgres ('...+00:00') para o mesmo formato ISO usado localmente ('...Z'). */
-const iso = (v: unknown) => new Date(String(v)).toISOString();
-const isoOrNull = (v: unknown) => (v == null ? null : iso(v));
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Adapters por tabela (explícitos = type-safe com Drizzle)
-// ─────────────────────────────────────────────────────────────────────────────
-
-const adapters: TableAdapter[] = [
-  {
-    name: 'user_goals',
-    async selectDirty() {
-      const rows = await db.select().from(userGoals).where(eq(userGoals.isSynced, false)).limit(PUSH_BATCH_SIZE);
-      return { payload: rows.map(goalsToRemote), acks: rows.map((r) => ({ id: r.id, updatedAt: r.updatedAt })) };
-    },
-    markSynced(acks) {
-      db.transaction((tx) => {
-        for (const a of acks) {
-          tx.update(userGoals)
-            .set({ isSynced: true })
-            .where(and(eq(userGoals.id, a.id), eq(userGoals.updatedAt, a.updatedAt)))
-            .run();
-        }
-      });
-    },
-    applyRemote(rows) {
-      db.transaction((tx) => {
-        for (const r of rows) {
-          const values = {
-            id: str(r.id),
-            proteinGoal: num(r.protein_goal),
-            waterGoal: num(r.water_goal),
-            caloriesGoal: num(r.calories_goal),
-            language: r.language === 'en' ? ('en' as const) : ('pt' as const),
-            updatedAt: iso(r.updated_at),
-            isSynced: true,
-          };
-          tx.insert(userGoals)
-            .values(values)
-            .onConflictDoUpdate({
-              target: userGoals.id,
-              set: values,
-              setWhere: sql`excluded.updated_at > ${userGoals.updatedAt}`,
-            })
-            .run();
-        }
-      });
-    },
-    hasDirty() {
-      return !!db.select({ id: userGoals.id }).from(userGoals).where(eq(userGoals.isSynced, false)).limit(1).get();
-    },
-  },
-  {
-    name: 'water_logs',
-    async selectDirty() {
-      const rows = await db.select().from(waterLogs).where(eq(waterLogs.isSynced, false)).limit(PUSH_BATCH_SIZE);
-      return { payload: rows.map(waterToRemote), acks: rows.map((r) => ({ id: r.id, updatedAt: r.updatedAt })) };
-    },
-    markSynced(acks) {
-      db.transaction((tx) => {
-        for (const a of acks) {
-          tx.update(waterLogs)
-            .set({ isSynced: true })
-            .where(and(eq(waterLogs.id, a.id), eq(waterLogs.updatedAt, a.updatedAt)))
-            .run();
-        }
-      });
-    },
-    applyRemote(rows) {
-      db.transaction((tx) => {
-        for (const r of rows) {
-          const values = {
-            id: str(r.id),
-            amountMl: num(r.amount_ml),
-            dateKey: str(r.date_key),
-            createdAt: iso(r.created_at),
-            updatedAt: iso(r.updated_at),
-            deletedAt: isoOrNull(r.deleted_at),
-            isSynced: true,
-          };
-          tx.insert(waterLogs)
-            .values(values)
-            .onConflictDoUpdate({
-              target: waterLogs.id,
-              set: values,
-              setWhere: sql`excluded.updated_at > ${waterLogs.updatedAt}`,
-            })
-            .run();
-        }
-      });
-    },
-    hasDirty() {
-      return !!db.select({ id: waterLogs.id }).from(waterLogs).where(eq(waterLogs.isSynced, false)).limit(1).get();
-    },
-  },
-  {
-    name: 'food_logs',
-    async selectDirty() {
-      const rows = await db.select().from(foodLogs).where(eq(foodLogs.isSynced, false)).limit(PUSH_BATCH_SIZE);
-      return { payload: rows.map(foodToRemote), acks: rows.map((r) => ({ id: r.id, updatedAt: r.updatedAt })) };
-    },
-    markSynced(acks) {
-      db.transaction((tx) => {
-        for (const a of acks) {
-          tx.update(foodLogs)
-            .set({ isSynced: true })
-            .where(and(eq(foodLogs.id, a.id), eq(foodLogs.updatedAt, a.updatedAt)))
-            .run();
-        }
-      });
-    },
-    applyRemote(rows) {
-      db.transaction((tx) => {
-        for (const r of rows) {
-          const values = {
-            id: str(r.id),
-            name: str(r.name),
-            proteinG: num(r.protein_g),
-            caloriesKcal: num(r.calories_kcal),
-            entryMethod: r.entry_method === 'image' ? ('image' as const) : ('manual' as const),
-            mealWindow: (['breakfast', 'lunch', 'dinner', 'snack'].includes(String(r.meal_window))
-              ? r.meal_window
-              : 'lunch') as 'breakfast' | 'lunch' | 'dinner' | 'snack',
-            dateKey: str(r.date_key),
-            createdAt: iso(r.created_at),
-            updatedAt: iso(r.updated_at),
-            deletedAt: isoOrNull(r.deleted_at),
-            isSynced: true,
-          };
-          tx.insert(foodLogs)
-            .values(values)
-            .onConflictDoUpdate({
-              target: foodLogs.id,
-              set: values,
-              setWhere: sql`excluded.updated_at > ${foodLogs.updatedAt}`,
-            })
-            .run();
-        }
-      });
-    },
-    hasDirty() {
-      return !!db.select({ id: foodLogs.id }).from(foodLogs).where(eq(foodLogs.isSynced, false)).limit(1).get();
-    },
-  },
-];
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Push / Pull
-// ─────────────────────────────────────────────────────────────────────────────
-
-async function pushTable(adapter: TableAdapter): Promise<number> {
-  if (!supabase) return 0;
-  let total = 0;
-
-  // Loop até esvaziar a fila (lotes de PUSH_BATCH_SIZE).
-  while (true) {
-    const { payload, acks } = await adapter.selectDirty();
-    if (payload.length === 0) break;
-
-    const { error } = await supabase.from(adapter.name).upsert(payload, { onConflict: 'id' });
-    if (error) throw new Error(`[push:${adapter.name}] ${error.message}`);
-
-    adapter.markSynced(acks);
-    total += payload.length;
-    if (payload.length < PUSH_BATCH_SIZE) break;
-  }
-  return total;
-}
-
-async function pullTable(adapter: TableAdapter): Promise<number> {
-  if (!supabase) return 0;
-  let total = 0;
-  let cursor = (await Storage.getItem(CURSOR_KEY(adapter.name))) ?? EPOCH;
-
-  while (true) {
-    const { data, error } = await supabase
-      .from(adapter.name)
-      .select('*')
-      .gt('server_updated_at', cursor)
-      .order('server_updated_at', { ascending: true })
-      .limit(PULL_BATCH_SIZE);
-
-    if (error) throw new Error(`[pull:${adapter.name}] ${error.message}`);
-    const rows = (data ?? []) as RemoteRow[];
-    if (rows.length === 0) break;
-
-    adapter.applyRemote(rows);
-    cursor = rows[rows.length - 1].server_updated_at;
-    await Storage.setItem(CURSOR_KEY(adapter.name), cursor);
-    total += rows.length;
-    if (rows.length < PULL_BATCH_SIZE) break;
-  }
-  return total;
-}
-
-const emptyCounts = (): Record<SyncTableName, number> =>
-  Object.fromEntries(SYNC_TABLES.map((t) => [t, 0])) as Record<SyncTableName, number>;
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Engine
-// ─────────────────────────────────────────────────────────────────────────────
-
 export interface SyncState {
   isSyncing: boolean;
   isOnline: boolean;
   isEnabled: boolean;
   lastResult: SyncResult | null;
+  pending: number;
+  conflicts: number;
 }
-
+export type SchemaVerificationResult =
+  | { status: 'ready' }
+  | { status: 'missing_tables'; table: string }
+  | { status: 'invalid_credentials'; message: string };
 export type Listener = (state: SyncState) => void;
-
-class SyncEngine {
-  private inFlight: Promise<SyncResult> | null = null;
-  private debounceTimer: ReturnType<typeof setTimeout> | null = null;
-  private subscriptions: (() => void)[] = [];
-  private isOnline = false;
-  private lastResult: SyncResult | null = null;
-  private listeners = new Set<Listener>();
-
-  get isEnabled() {
-    return isSupabaseConfigured;
+interface Change {
+  table: SyncTableName;
+  expectedRevision: number;
+  row: RawRecord;
+}
+interface Pending {
+  id: string;
+  payload: string;
+  attempted: number;
+}
+interface Receipt {
+  ok: boolean;
+  records?: RemoteRecord[];
+  conflicts?: {
+    table: SyncTableName;
+    localId: string;
+    row: RawRecord | null;
+  }[];
+}
+const counts = () =>
+  Object.fromEntries(SYNC_TABLES.map((t) => [t, 0])) as Record<
+    SyncTableName,
+    number
+  >;
+const LOGICAL_DAY_TABLES = ['daily_checkins', 'training_days'];
+const EPOCH = '1970-01-01T00:00:00.000Z';
+function pendingCount(connection = expoDb) {
+  return SYNC_TABLES.reduce(
+    (n, t) =>
+      n +
+      (connection.getFirstSync<{ n: number }>(
+        `SELECT count(*) n FROM ${t} WHERE is_synced=0`,
+      )?.n ?? 0),
+    0,
+  );
+}
+export async function verifySupabaseSchema(
+  client?: SupabaseClient | null,
+): Promise<SchemaVerificationResult> {
+  const c = client ?? (await getDynamicSupabaseClient());
+  if (!c)
+    return { status: 'invalid_credentials', message: 'Configure Supabase' };
+  const { data, error } = await c.rpc('fit_schema_v2');
+  if (error || data !== 2)
+    return { status: 'missing_tables', table: 'fit_schema_v2' };
+  return { status: 'ready' };
+}
+function remoteLocal(
+  connection: SQLiteDatabase,
+  record: RemoteRecord,
+  owner: string,
+) {
+  if (!isSyncTable(record.table) || record.row.owner_id !== owner)
+    throw new Error('Invalid remote owner');
+  return validateRecord(
+    record.table,
+    { ...record.row, is_synced: 1 },
+    tableColumns(connection, record.table),
+  );
+}
+function storeConflict(
+  connection: SQLiteDatabase,
+  id: string,
+  change: Change,
+  remote: RawRecord | null,
+) {
+  connection.runSync(
+    'INSERT INTO sync_conflicts(id,table_name,local_id,remote_json,operation_id) VALUES (?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET remote_json=excluded.remote_json,operation_id=excluded.operation_id',
+    `${change.table}:${change.row.id}`,
+    change.table,
+    String(change.row.id),
+    JSON.stringify(remote),
+    id,
+  );
+}
+function applyRecords(
+  connection: SQLiteDatabase,
+  records: RemoteRecord[],
+  owner: string,
+) {
+  const prepared = records.map((record) => ({
+    ...record,
+    row: remoteLocal(connection, record, owner),
+    local:
+      connection.getFirstSync<RawRecord>(
+        `SELECT * FROM ${record.table} WHERE id=?`,
+        String(record.row.id),
+      ) ??
+      (LOGICAL_DAY_TABLES.includes(record.table)
+        ? connection.getFirstSync<RawRecord>(
+            `SELECT * FROM ${record.table} WHERE date_key=? AND deleted_at IS NULL`,
+            String(record.row.date_key),
+          )
+        : null),
+  }));
+  const changedDirty = prepared.some(
+    (p) =>
+      p.local &&
+      !p.local.is_synced &&
+      (p.row.id !== p.local.id ||
+        Number(p.row.revision) > Number(p.local.revision)),
+  );
+  // Linked food and volume always apply or wait together.
+  if (changedDirty) {
+    const operation = String(
+      prepared.find((p) => p.local?.operation_id)?.local?.operation_id ??
+        generateId(),
+    );
+    for (const p of prepared)
+      if (p.local && !p.local.is_synced)
+        storeConflict(
+          connection,
+          operation,
+          {
+            table: p.table,
+            expectedRevision: Number(p.local.revision),
+            row: p.local,
+          },
+          p.row,
+        );
+    return;
   }
-
+  for (const p of prepared) {
+    if (
+      p.local &&
+      p.local.id !== p.row.id &&
+      LOGICAL_DAY_TABLES.includes(p.table)
+    ) {
+      connection.runSync(
+        `UPDATE ${p.table} SET deleted_at=?,is_synced=1 WHERE id=?`,
+        new Date().toISOString(),
+        String(p.local.id),
+      );
+      writeRaw(connection, p.table, p.row);
+      continue;
+    }
+    if (
+      p.local &&
+      (!p.local.is_synced || Number(p.local.revision) >= Number(p.row.revision))
+    )
+      continue;
+    if (p.local?.image_uri && 'image_uri' in p.row)
+      p.row.image_uri = p.local.image_uri;
+    writeRaw(connection, p.table, p.row);
+  }
+}
+function prepareOutbox(connection: SQLiteDatabase) {
+  const queued = new Set<string>();
+  for (const pending of connection.getAllSync<Pending>(
+    'SELECT * FROM sync_outbox',
+  ))
+    for (const c of JSON.parse(pending.payload) as Change[])
+      queued.add(`${c.table}:${c.row.id}`);
+  const blocked = new Set(
+    connection
+      .getAllSync<{ table_name: string; local_id: string }>(
+        'SELECT table_name,local_id FROM sync_conflicts',
+      )
+      .map((r) => `${r.table_name}:${r.local_id}`),
+  );
+  const visited = new Set<string>();
+  for (const table of SYNC_TABLES) {
+    const rows = connection.getAllSync<RawRecord>(
+      `SELECT * FROM ${table} WHERE is_synced=0 ORDER BY created_at,id`,
+    );
+    for (const row of rows) {
+      const key = `${table}:${row.id}`;
+      if (queued.has(key) || blocked.has(key) || visited.has(key)) continue;
+      let members: { table: SyncTableName; row: RawRecord }[] = [
+        { table, row },
+      ];
+      if (row.group_id)
+        members = (['food_logs', 'water_logs'] as const).flatMap((t) =>
+          connection
+            .getAllSync<RawRecord>(
+              `SELECT * FROM ${t} WHERE group_id=?`,
+              String(row.group_id),
+            )
+            .map((r) => ({ table: t, row: r })),
+        );
+      if (
+        members.some(
+          (m) =>
+            queued.has(`${m.table}:${m.row.id}`) ||
+            blocked.has(`${m.table}:${m.row.id}`),
+        )
+      )
+        continue;
+      const id = String(row.operation_id ?? generateId());
+      const changes = members.map((m) => {
+        visited.add(`${m.table}:${m.row.id}`);
+        return {
+          table: m.table,
+          expectedRevision: Number(m.row.revision),
+          row: toRemote(m.row),
+        };
+      });
+      connection.runSync(
+        'INSERT OR IGNORE INTO sync_outbox(id,payload) VALUES (?,?)',
+        id,
+        JSON.stringify(changes),
+      );
+    }
+  }
+}
+export async function syncWithSupabase(options?: {
+  forceFullSync?: boolean;
+}): Promise<SyncResult> {
+  const pushed = counts(),
+    pulled = counts();
+  const result = (ok: boolean, error?: string): SyncResult => ({
+    ok,
+    pushed,
+    pulled,
+    error,
+    finishedAt: new Date().toISOString(),
+  });
+  let client: SupabaseClient | null;
+  try {
+    client = await getDynamicSupabaseClient();
+  } catch (e) {
+    return result(false, e instanceof Error ? e.message : 'unconfigured');
+  }
+  const owner = activeOwner,
+    connection = expoDb,
+    scope = getDatabaseScope();
+  const assertScope = () => {
+    if (scope !== getDatabaseScope() || activeOwner !== owner)
+      throw new Error('account_changed');
+  };
+  if (!client || !owner || !getAuthSession())
+    return result(false, 'sign_in_required');
+  if (!getPreference('cloudSync', false)) return result(false, 'local_only');
+  try {
+    const network = await NetInfo.fetch();
+    assertScope();
+    if (!network.isConnected || network.isInternetReachable === false)
+      return result(false, 'offline');
+    const { data: auth, error: authError } = await client.auth.getUser();
+    assertScope();
+    if (authError || auth.user?.id !== owner)
+      throw new Error('sign_in_required');
+    if ((await verifySupabaseSchema(client)).status !== 'ready')
+      throw new Error('server_update_required');
+    assertScope();
+    connection.withTransactionSync(() => prepareOutbox(connection));
+    const outbox = connection.getAllSync<Pending>(
+      'SELECT * FROM sync_outbox ORDER BY rowid',
+    );
+    for (const op of outbox) {
+      assertScope();
+      let changes = JSON.parse(op.payload) as Change[];
+      // A preceding goal plan may just have received its server revision.
+      if (!op.attempted)
+        changes = changes.map((c) => {
+          if (c.table !== 'goal_plans' || !c.row.replaces_id) return c;
+          const base = connection.getFirstSync<{ revision: number }>(
+            'SELECT revision FROM goal_plans WHERE id=?',
+            String(c.row.replaces_id),
+          );
+          return {
+            ...c,
+            row: {
+              ...c.row,
+              replaces_revision: base?.revision ?? c.row.replaces_revision,
+            },
+          };
+        });
+      // Freeze the exact request for idempotent retries after a lost response.
+      connection.runSync(
+        'UPDATE sync_outbox SET payload=?,attempted=1 WHERE id=?',
+        JSON.stringify(changes),
+        op.id,
+      );
+      const { data, error } = await client.rpc('fit_mutate_v2', {
+        p_operation_id: op.id,
+        p_changes: changes,
+        p_client_version: 2,
+      });
+      assertScope();
+      if (error) throw new Error(error.message);
+      const receipt = data as Receipt;
+      connection.withTransactionSync(() => {
+        if (!receipt.ok) {
+          for (const change of changes) {
+            const conflict = receipt.conflicts?.find(
+              (c) => c.table === change.table && c.localId === change.row.id,
+            );
+            const remote = conflict?.row ?? null;
+            if (remote)
+              remoteLocal(
+                connection,
+                { table: change.table, row: remote },
+                owner,
+              );
+            storeConflict(connection, op.id, change, remote);
+          }
+        } else {
+          for (const record of receipt.records ?? []) {
+            const remote = remoteLocal(connection, record, owner);
+            const local = connection.getFirstSync<RawRecord>(
+              `SELECT * FROM ${record.table} WHERE id=?`,
+              String(remote.id),
+            );
+            const sent = changes.find(
+              (c) => c.table === record.table && c.row.id === remote.id,
+            );
+            if (!local || !sent) throw new Error('Invalid sync receipt');
+            const unchanged =
+              String(local.operation_id ?? op.id) === op.id &&
+              String(local.updated_at) === String(sent.row.updated_at);
+            if (unchanged) {
+              if (local.image_uri && 'image_uri' in remote)
+                remote.image_uri = local.image_uri;
+              writeRaw(connection, record.table, remote);
+            } else
+              connection.runSync(
+                `UPDATE ${record.table} SET revision=? WHERE id=?`,
+                Number(remote.revision),
+                String(remote.id),
+              );
+            if (record.table === 'goal_plans')
+              connection.runSync(
+                'UPDATE goal_plans SET replaces_revision=? WHERE replaces_id=? AND is_synced=0',
+                Number(remote.revision),
+                String(remote.id),
+              );
+            pushed[record.table]++;
+          }
+          connection.runSync('DELETE FROM sync_outbox WHERE id=?', op.id);
+        }
+      });
+    }
+    for (const table of SYNC_TABLES) {
+      assertScope();
+      const checkpoint = connection.getFirstSync<{
+        timestamp: string;
+        row_id: string;
+        reconciled_at: string | null;
+      }>('SELECT * FROM sync_checkpoints WHERE table_name=?', table);
+      const full =
+        options?.forceFullSync ||
+        !checkpoint?.reconciled_at ||
+        Date.now() - Date.parse(checkpoint.reconciled_at) > 86400000;
+      let time = full
+          ? EPOCH
+          : new Date(
+              Math.max(0, Date.parse(checkpoint!.timestamp) - 300000),
+            ).toISOString(),
+        id = '';
+      let lastTime = checkpoint?.timestamp ?? EPOCH,
+        lastId = checkpoint?.row_id ?? '';
+      for (;;) {
+        const { data, error } = await client.rpc('fit_page_v2', {
+          p_table: table,
+          p_after_time: time,
+          p_after_id: id,
+          p_limit: 500,
+        });
+        assertScope();
+        if (error) throw new Error(error.message);
+        if (!Array.isArray(data)) throw new Error('Invalid sync page');
+        const page = data as RawRecord[];
+        if (!page.length) break;
+        const records: RemoteRecord[][] = [];
+        const groups = new Set<string>();
+        for (const row of page) {
+          if (row.group_id) {
+            const group = String(row.group_id);
+            if (groups.has(group)) continue;
+            groups.add(group);
+            const response = await client.rpc('fit_group_v2', {
+              p_group: group,
+            });
+            assertScope();
+            if (response.error) throw response.error;
+            const members = response.data as RemoteRecord[];
+            if (
+              !Array.isArray(members) ||
+              members.length !== 2 ||
+              !members.some((m) => m.table === 'food_logs') ||
+              !members.some((m) => m.table === 'water_logs') ||
+              members.some((m) => m.row.group_id !== group)
+            )
+              throw new Error('Incomplete remote group');
+            records.push(members);
+          } else records.push([{ table, row }]);
+        }
+        const last = page[page.length - 1];
+        time = String(last.server_updated_at);
+        id = String(last.id);
+        if (time > lastTime || (time === lastTime && id > lastId)) {
+          lastTime = time;
+          lastId = id;
+        }
+        connection.withTransactionSync(() => {
+          for (const group of records) applyRecords(connection, group, owner);
+          connection.runSync(
+            'INSERT INTO sync_checkpoints(table_name,timestamp,row_id,reconciled_at) VALUES (?,?,?,?) ON CONFLICT(table_name) DO UPDATE SET timestamp=excluded.timestamp,row_id=excluded.row_id',
+            table,
+            lastTime,
+            lastId,
+            checkpoint?.reconciled_at ?? null,
+          );
+        });
+        pulled[table] += page.length;
+        if (page.length < 500) break;
+      }
+      if (full)
+        connection.runSync(
+          'INSERT INTO sync_checkpoints(table_name,timestamp,row_id,reconciled_at) VALUES (?,?,?,?) ON CONFLICT(table_name) DO UPDATE SET reconciled_at=excluded.reconciled_at',
+          table,
+          lastTime,
+          lastId,
+          new Date().toISOString(),
+        );
+    }
+    assertScope();
+    return pendingCount(connection) === 0 &&
+      !connection.getFirstSync('SELECT id FROM sync_conflicts LIMIT 1')
+      ? result(true)
+      : result(false, 'pending');
+  } catch (e) {
+    return result(false, e instanceof Error ? e.message : 'sync_failed');
+  }
+}
+export function getSyncConflicts() {
+  return expoDb.getAllSync<{
+    id: string;
+    table_name: SyncTableName;
+    local_id: string;
+    remote_json: string;
+    operation_id: string;
+  }>('SELECT * FROM sync_conflicts ORDER BY id');
+}
+export function resolveSyncConflict(id: string, choice: 'cloud' | 'device') {
+  const conflict = getSyncConflicts().find((c) => c.id === id);
+  if (!conflict) return;
+  const conflicts = getSyncConflicts().filter(
+    (c) => c.operation_id === conflict.operation_id,
+  );
+  const nextOp = generateId();
+  expoDb.withTransactionSync(() => {
+    for (const c of conflicts) {
+      const remote = JSON.parse(c.remote_json) as RawRecord | null;
+      const local = expoDb.getFirstSync<RawRecord>(
+        `SELECT * FROM ${c.table_name} WHERE id=?`,
+        c.local_id,
+      );
+      if (!local) continue;
+      if (choice === 'cloud') {
+        if (remote && remote.id === c.local_id)
+          writeRaw(expoDb, c.table_name, {
+            ...remote,
+            is_synced: 1,
+            image_uri: local.image_uri ?? null,
+          });
+        else {
+          expoDb.runSync(
+            `UPDATE ${c.table_name} SET deleted_at=?,is_synced=1 WHERE id=?`,
+            new Date().toISOString(),
+            c.local_id,
+          );
+          if (remote)
+            writeRaw(expoDb, c.table_name, { ...remote, is_synced: 1 });
+        }
+      } else if (
+        remote &&
+        remote.id !== local.id &&
+        LOGICAL_DAY_TABLES.includes(c.table_name)
+      ) {
+        expoDb.runSync(
+          `UPDATE ${c.table_name} SET deleted_at=?,is_synced=1 WHERE id=?`,
+          new Date().toISOString(),
+          c.local_id,
+        );
+        writeRaw(expoDb, c.table_name, {
+          ...local,
+          id: remote.id,
+          revision: remote.revision,
+          created_at: remote.created_at,
+          is_synced: 0,
+          operation_id: nextOp,
+          updated_at: new Date().toISOString(),
+        });
+      } else if (c.table_name === 'goal_plans')
+        expoDb.runSync(
+          'UPDATE goal_plans SET replaces_id=?,replaces_revision=?,revision=0,operation_id=?,updated_at=?,is_synced=0 WHERE id=?',
+          remote?.id ?? null,
+          Number(remote?.revision ?? 0),
+          nextOp,
+          new Date().toISOString(),
+          c.local_id,
+        );
+      else
+        expoDb.runSync(
+          `UPDATE ${c.table_name} SET revision=?,operation_id=?,updated_at=?,is_synced=0 WHERE id=?`,
+          Number(remote?.revision ?? 0),
+          nextOp,
+          new Date().toISOString(),
+          c.local_id,
+        );
+    }
+    expoDb.runSync(
+      'DELETE FROM sync_conflicts WHERE operation_id=?',
+      conflict.operation_id,
+    );
+    expoDb.runSync('DELETE FROM sync_outbox WHERE id=?', conflict.operation_id);
+  });
+  syncEngine.requestSync(0);
+}
+class SyncEngine {
+  private listeners = new Set<Listener>();
+  private subscriptions: (() => void)[] = [];
+  private timer: ReturnType<typeof setTimeout> | null = null;
+  private inFlight: Promise<SyncResult> | null = null;
+  private lastResult: SyncResult | null = null;
+  private isOnline = true;
+  private rerun = false;
+  private stateTimer: ReturnType<typeof setTimeout> | null = null;
+  get isEnabled() {
+    return (
+      !!activeOwner && !!getAuthSession() && getPreference('cloudSync', false)
+    );
+  }
   get online() {
     return this.isOnline;
   }
-
   getState(): SyncState {
     return {
-      isSyncing: !!this.inFlight,
-      isOnline: this.isOnline,
       isEnabled: this.isEnabled,
+      isOnline: this.isOnline,
+      isSyncing: !!this.inFlight,
       lastResult: this.lastResult,
+      pending: pendingCount(),
+      conflicts: getSyncConflicts().length,
     };
   }
-
-  /** Idempotente. Chame uma vez no root layout. */
-  start(): void {
-    if (!this.isEnabled) {
-      if (__DEV__) console.info('[sync] Supabase não configurado — rodando 100% offline.');
-      this.emit();
-      return;
-    }
-    if (this.subscriptions.length > 0) return;
-
-    const netSub = NetInfo.addEventListener((state) => {
-      const wasOnline = this.isOnline;
-      this.isOnline = !!state.isConnected && state.isInternetReachable !== false;
-      this.emit();
-      if (this.isOnline && !wasOnline) this.requestSync(0);
-    });
-
-    const appStateSub = AppState.addEventListener('change', (status) => {
-      if (status === 'active') this.requestSync(0);
-    });
-
-    const dbSub = addDatabaseChangeListener(({ tableName }) => {
-      // Escritas feitas pelo próprio sync (markSynced/applyRemote) são ignoradas aqui;
-      // o pós-sync verifica se sobrou algo sujo.
-      if (this.inFlight) return;
-      if ((SYNC_TABLES as readonly string[]).includes(tableName)) {
-        this.requestSync(LOCAL_CHANGE_DEBOUNCE_MS);
-      }
-    });
-
-    this.subscriptions.push(netSub, () => appStateSub.remove(), () => dbSub.remove());
-
-    NetInfo.fetch().then((state) => {
-      this.isOnline = !!state.isConnected && state.isInternetReachable !== false;
-      this.emit();
-      this.requestSync(0);
-    });
+  async refreshEnabledStatus() {
+    await getDynamicSupabaseClient();
+    this.lastResult = null;
+    this.emit();
+    if (this.isEnabled) this.requestSync(0);
   }
-
-  stop(): void {
-    this.subscriptions.forEach((unsub) => unsub());
+  start() {
+    if (this.subscriptions.length) return;
+    void this.refreshEnabledStatus().catch(() => this.emit());
+    this.subscriptions.push(
+      NetInfo.addEventListener((s) => {
+        const before = this.isOnline;
+        this.isOnline = !!s.isConnected && s.isInternetReachable !== false;
+        this.emit();
+        if (!before && this.isOnline) this.requestSync(0);
+      }),
+      subscribeAuth(() => {
+        this.lastResult = null;
+        this.emit();
+        this.requestSync(0);
+      }),
+    );
+    const app = AppState.addEventListener('change', (s) => {
+      if (s === 'active') this.requestSync(0);
+    });
+    const database = addDatabaseChangeListener(
+      ({ tableName, databaseFilePath }) => {
+        if (databaseFilePath !== expoDb.databasePath) return;
+        if (
+          (SYNC_TABLES as readonly string[]).includes(tableName) ||
+          tableName === 'local_preferences'
+        ) {
+          if (this.inFlight) this.rerun = true;
+          else this.requestSync();
+          if (!this.stateTimer)
+            this.stateTimer = setTimeout(() => {
+              this.stateTimer = null;
+              this.emit();
+            }, 80);
+        }
+      },
+    );
+    this.subscriptions.push(
+      () => app.remove(),
+      () => database.remove(),
+    );
+  }
+  stop() {
+    this.subscriptions.forEach((f) => f());
     this.subscriptions = [];
-    if (this.debounceTimer) clearTimeout(this.debounceTimer);
-    this.debounceTimer = null;
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = null;
+    if (this.stateTimer) clearTimeout(this.stateTimer);
+    this.stateTimer = null;
   }
-
-  /** Agenda um sync com debounce (coalesce múltiplas escritas rápidas). */
-  requestSync(delayMs = LOCAL_CHANGE_DEBOUNCE_MS): void {
+  requestSync(delay = 1500) {
     if (!this.isEnabled) return;
-    if (this.debounceTimer) clearTimeout(this.debounceTimer);
-    this.debounceTimer = setTimeout(() => {
-      this.debounceTimer = null;
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = setTimeout(() => {
+      this.timer = null;
       void this.syncNow();
-    }, delayMs);
+    }, delay);
   }
-
-  /** Executa push → pull. Se já houver um sync em andamento, reaproveita a mesma Promise (mutex). */
-  syncNow(): Promise<SyncResult> {
+  syncNow(options?: { forceFullSync?: boolean }) {
     if (this.inFlight) return this.inFlight;
-    this.inFlight = this.run().finally(() => {
-      this.inFlight = null;
-      this.emit();
-      // Usuário escreveu algo enquanto o sync rodava? Agenda outra rodada.
-      if (this.lastResult?.ok && adapters.some((a) => a.hasDirty())) this.requestSync(0);
-    });
+    const scope = getDatabaseScope();
+    this.rerun = false;
+    this.inFlight = syncWithSupabase(options)
+      .then((r) => {
+        if (scope === getDatabaseScope()) this.lastResult = r;
+        return r;
+      })
+      .finally(() => {
+        this.inFlight = null;
+        this.emit();
+        if (
+          this.rerun &&
+          this.isEnabled &&
+          pendingCount() > 0 &&
+          !getSyncConflicts().length
+        )
+          this.requestSync();
+      });
     this.emit();
     return this.inFlight;
   }
-
-  subscribe(listener: Listener): () => void {
+  subscribe(listener: Listener) {
     this.listeners.add(listener);
     listener(this.getState());
-    return () => this.listeners.delete(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
   }
-
-  /** Útil para "logout"/reset: força pull completo no próximo sync. */
-  async resetCursors(): Promise<void> {
-    await Promise.all(SYNC_TABLES.map((t) => Storage.removeItem(CURSOR_KEY(t))));
-  }
-
-  private async run(): Promise<SyncResult> {
-    const pushed = emptyCounts();
-    const pulled = emptyCounts();
-
-    if (!supabase || !this.isOnline) {
-      return this.finish({ ok: false, pushed, pulled, error: 'offline', finishedAt: new Date().toISOString() });
-    }
-
-    try {
-      // Push primeiro: garante que edições locais cheguem antes de o pull comparar timestamps.
-      for (const adapter of adapters) pushed[adapter.name] = await pushTable(adapter);
-      for (const adapter of adapters) pulled[adapter.name] = await pullTable(adapter);
-      return this.finish({ ok: true, pushed, pulled, finishedAt: new Date().toISOString() });
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
-      if (__DEV__) console.warn('[sync] falhou:', message);
-      // Nada é perdido: linhas continuam com is_synced = 0 e serão reenviadas no próximo gatilho.
-      return this.finish({ ok: false, pushed, pulled, error: message, finishedAt: new Date().toISOString() });
-    }
-  }
-
-  private finish(result: SyncResult): SyncResult {
-    this.lastResult = result;
-    return result;
-  }
-
-  private emit(): void {
+  private emit() {
     const state = this.getState();
-    this.listeners.forEach((l) => l(state));
+    this.listeners.forEach((f) => f(state));
   }
 }
-
 export const syncEngine = new SyncEngine();

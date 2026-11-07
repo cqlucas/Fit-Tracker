@@ -34,8 +34,9 @@ export function FoodImagePickerCard({
   isPt = false,
 }: FoodImagePickerCardProps) {
   const [isInputFocused, setIsInputFocused] = useState(false);
+  const [failedUri, setFailedUri] = useState<string | null>(null);
 
-  const hasPhoto = Boolean(imageUri);
+  const hasPhoto = Boolean(imageUri && failedUri !== imageUri);
   const hasContext = Boolean(aiContextText.trim().length > 0);
   const canAnalyze = (hasPhoto || hasContext) && !isAnalyzing;
 
@@ -46,13 +47,14 @@ export function FoodImagePickerCard({
       {/* ─────────────────────────────────────────────────────────────────── */}
       <View style={styles.hudCard}>
         {/* Background Image Preview se houver foto */}
-        {imageUri ? (
+        {hasPhoto && imageUri ? (
           <View style={styles.previewWrapper}>
             <Image
               source={{ uri: imageUri }}
               style={styles.previewImage}
               contentFit="cover"
               transition={300}
+              onError={() => setFailedUri(imageUri)}
             />
             <View style={styles.previewScrim} />
           </View>

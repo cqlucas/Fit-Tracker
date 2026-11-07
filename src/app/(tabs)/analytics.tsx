@@ -1,13 +1,15 @@
 import { Activity, Sparkles } from 'lucide-react-native';
-import React from 'react';
+import React, { useEffect } from 'react';
+import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import {
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+  SafeAreaView,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
 
+import { RoutineReviewCard } from '@/components/dashboard/RoutineReviewCard';
+import { useLocalData, useTodayKey } from '@/hooks/useLocalData';
+import { routineRepository } from '@/repositories/routine.repository';
+import { Note } from '@/components/ui/Form';
 import { AnalyticsPeriodSelector } from '@/components/analytics/AnalyticsPeriodSelector';
 import { AnalyticsSkeleton } from '@/components/analytics/AnalyticsSkeleton';
 import { ConsistencyGridCard } from '@/components/analytics/ConsistencyGridCard';
@@ -22,8 +24,15 @@ import { colors, radii, spacing } from '@/theme/tokens';
 export default function AnalyticsScreen() {
   const insets = useSafeAreaInsets();
   const { t } = useLanguage();
-  const { period, setPeriod, data, isLoading, isRefreshing, refresh } =
+  const { period, setPeriod, data, isLoading, isRefreshing, refresh, error } =
     useAnalyticsData('7d');
+  const today = useTodayKey();
+  const routine = useLocalData(() => routineRepository.overview(today));
+  const refreshRoutine = routine.refresh;
+  useEffect(() => {
+    void refreshRoutine();
+    void refresh();
+  }, [today, refreshRoutine, refresh]);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
@@ -41,7 +50,8 @@ export default function AnalyticsScreen() {
             tintColor={colors.primary}
             colors={[colors.primary]}
           />
-        }>
+        }
+      >
         {/* Header da Tela de Analytics */}
         <View style={styles.header}>
           <View style={styles.headerTitleWrap}>
@@ -51,7 +61,8 @@ export default function AnalyticsScreen() {
                 <Typography
                   variant="unitCaption"
                   color={colors.primary}
-                  style={styles.badgeText}>
+                  style={styles.badgeText}
+                >
                   {t.analytics.headerSubtitle}
                 </Typography>
               </View>
@@ -62,6 +73,7 @@ export default function AnalyticsScreen() {
           </View>
         </View>
 
+        {error && <Note error>{error}</Note>}
         {/* Estado de Carregamento ou Conteúdo Principal */}
         {isLoading && !data ? (
           <AnalyticsSkeleton />
@@ -78,10 +90,17 @@ export default function AnalyticsScreen() {
               <View style={styles.emptyHintCard}>
                 <Sparkles size={18} color={colors.secondary} />
                 <View style={styles.emptyHintTextWrap}>
-                  <Typography variant="labelSm" color={colors.onSurface} style={styles.bold}>
+                  <Typography
+                    variant="labelSm"
+                    color={colors.onSurface}
+                    style={styles.bold}
+                  >
                     {t.analytics.emptyTitle}
                   </Typography>
-                  <Typography variant="unitCaption" color={colors.onSurfaceVariant}>
+                  <Typography
+                    variant="unitCaption"
+                    color={colors.onSurfaceVariant}
+                  >
                     {t.analytics.emptySubtitle}
                   </Typography>
                 </View>
@@ -97,6 +116,8 @@ export default function AnalyticsScreen() {
             {/* 4. Distribuição por Janela de Refeição */}
             <MealWindowDistributionCard breakdown={data.mealWindowBreakdown} />
 
+            {routine.data && <RoutineReviewCard data={routine.data} />}
+            {routine.error && <Note error>{routine.error}</Note>}
             {/* 5. Mapa de Consistência / Heatmap de Hábitos */}
             <ConsistencyGridCard series={data.dailySeries} />
           </View>

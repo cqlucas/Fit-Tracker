@@ -261,19 +261,26 @@ export const translations: Record<AppLanguage, TranslationSchema> = {
       syncStatusError: 'ERRO NA SINCRONIZAÇÃO',
       syncDescSynced: 'Banco de dados sincronizado em tempo real.',
       syncDescSyncing: 'Enviando e recebendo dados da nuvem...',
-      syncDescOffline: 'Alterações salvas localmente. Sincroniza ao reconectar.',
-      syncDescLocalOnly: 'Dados salvos com segurança no SQLite local deste aparelho.',
-      syncDescError: 'Falha na comunicação com o Supabase. Toque para tentar novamente.',
+      syncDescOffline:
+        'Alterações salvas localmente. Sincroniza ao reconectar.',
+      syncDescLocalOnly:
+        'Dados salvos com segurança no SQLite local deste aparelho.',
+      syncDescError:
+        'Falha na comunicação com o Supabase. Toque para tentar novamente.',
       syncLastSynced: (time: string) => `Última sincronização: ${time}`,
       syncTapToSync: 'Toque para sincronizar agora',
       syncNever: 'Pendente',
       syncJustNow: 'Agora mesmo',
       saveButton: 'Salvar Metas Diárias',
       savedButton: 'Metas Sincronizadas!',
-      saveFooter: 'As alterações recalculam instantaneamente os gráficos de rosca e o progresso.',
-      invalidProtein: 'Por favor, insira uma meta válida de proteína (maior que 0g).',
-      invalidWater: 'Por favor, insira uma meta válida de água (maior que 0ml).',
-      invalidCalories: 'Por favor, insira uma meta válida de calorias (maior que 0 kcal).',
+      saveFooter:
+        'As alterações recalculam instantaneamente os gráficos de rosca e o progresso.',
+      invalidProtein:
+        'Por favor, insira uma meta válida de proteína (maior que 0g).',
+      invalidWater:
+        'Por favor, insira uma meta válida de água (maior que 0ml).',
+      invalidCalories:
+        'Por favor, insira uma meta válida de calorias (maior que 0 kcal).',
       invalidTitle: 'Valor Inválido',
       errorTitle: 'Erro ao Salvar',
       errorMessage: 'Não foi possível persistir as metas no banco local.',
@@ -292,7 +299,8 @@ export const translations: Record<AppLanguage, TranslationSchema> = {
       proteinLabel: 'Proteína',
       caloriesLabel: 'Calorias',
       deleteTitle: 'Excluir registro',
-      deleteConfirm: 'Deseja realmente remover este registro? O histórico e as metas serão recalculados.',
+      deleteConfirm:
+        'Deseja realmente remover este registro? O histórico e as metas serão recalculados.',
       cancel: 'Cancelar',
       delete: 'Excluir',
       edit: 'Editar',
@@ -301,13 +309,15 @@ export const translations: Record<AppLanguage, TranslationSchema> = {
       saveChanges: 'Salvar Alterações',
       changesSaved: 'Alterações Salvas!',
       emptyTitle: 'Nenhum registro encontrado',
-      emptySubtitle: 'Tente alterar os filtros de busca ou adicione um novo registro pelo botão +.',
+      emptySubtitle:
+        'Tente alterar os filtros de busca ou adicione um novo registro pelo botão +.',
       clearFilters: 'Limpar filtros',
       breakfast: 'Café da manhã',
       lunch: 'Almoço',
       dinner: 'Jantar',
       snack: 'Lanche',
-      totalEntries: (count: number) => `${count} registro${count === 1 ? '' : 's'}`,
+      totalEntries: (count: number) =>
+        `${count} registro${count === 1 ? '' : 's'}`,
     },
     analytics: {
       headerTitle: 'Estatísticas & Evolução',
@@ -320,7 +330,8 @@ export const translations: Record<AppLanguage, TranslationSchema> = {
       avgCalories: 'Média Calorias/dia',
       successRate: 'Taxa de Metas',
       streak: 'Sequência Atual',
-      daysStreak: (days: number) => `${days} dia${days === 1 ? '' : 's'} seguidos`,
+      daysStreak: (days: number) =>
+        `${days} dia${days === 1 ? '' : 's'} seguidos`,
       aboveGoal: 'Acima da meta',
       belowGoal: 'Abaixo da meta',
       onGoal: 'Na meta',
@@ -347,9 +358,11 @@ export const translations: Record<AppLanguage, TranslationSchema> = {
       endDate: 'Data Fim',
       apply: 'Aplicar',
       invalidDate: 'Data inválida (use AAAA-MM-DD ou DD/MM/AAAA)',
-      singleDateHint: 'Para consultar um único dia, informe a mesma data no início e no fim.',
+      singleDateHint:
+        'Para consultar um único dia, informe a mesma data no início e no fim.',
       emptyTitle: 'Sem dados suficientes',
-      emptySubtitle: 'Registre suas refeições e hidratação para acompanhar sua evolução.',
+      emptySubtitle:
+        'Registre suas refeições e hidratação para acompanhar sua evolução.',
     },
   },
   en: {
@@ -449,10 +462,12 @@ export const translations: Record<AppLanguage, TranslationSchema> = {
       syncJustNow: 'Just now',
       saveButton: 'Save Daily Goals',
       savedButton: 'Goals Synchronized!',
-      saveFooter: 'Changes reflect instantly across widgets, companions, and ring charts.',
+      saveFooter:
+        'Changes reflect instantly across widgets, companions, and ring charts.',
       invalidProtein: 'Please enter a valid protein target (greater than 0g).',
       invalidWater: 'Please enter a valid water target (greater than 0ml).',
-      invalidCalories: 'Please enter a valid calorie target (greater than 0 kcal).',
+      invalidCalories:
+        'Please enter a valid calorie target (greater than 0 kcal).',
       invalidTitle: 'Invalid Value',
       errorTitle: 'Error Saving',
       errorMessage: 'Could not persist goals to local database.',
@@ -471,7 +486,8 @@ export const translations: Record<AppLanguage, TranslationSchema> = {
       proteinLabel: 'Protein',
       caloriesLabel: 'Calories',
       deleteTitle: 'Delete record',
-      deleteConfirm: 'Are you sure you want to delete this record? Totals will be updated immediately.',
+      deleteConfirm:
+        'Are you sure you want to delete this record? Totals will be updated immediately.',
       cancel: 'Cancel',
       delete: 'Delete',
       edit: 'Edit',
@@ -480,13 +496,15 @@ export const translations: Record<AppLanguage, TranslationSchema> = {
       saveChanges: 'Save Changes',
       changesSaved: 'Changes Saved!',
       emptyTitle: 'No logs found',
-      emptySubtitle: 'Try adjusting your search filters or log an entry using the + button.',
+      emptySubtitle:
+        'Try adjusting your search filters or log an entry using the + button.',
       clearFilters: 'Clear filters',
       breakfast: 'Breakfast',
       lunch: 'Lunch',
       dinner: 'Dinner',
       snack: 'Snack',
-      totalEntries: (count: number) => `${count} record${count === 1 ? '' : 's'}`,
+      totalEntries: (count: number) =>
+        `${count} record${count === 1 ? '' : 's'}`,
     },
     analytics: {
       headerTitle: 'Analytics & Progress',
@@ -499,7 +517,8 @@ export const translations: Record<AppLanguage, TranslationSchema> = {
       avgCalories: 'Avg Calories/day',
       successRate: 'Goal Hit Rate',
       streak: 'Current Streak',
-      daysStreak: (days: number) => `${days} day${days === 1 ? '' : 's'} streak`,
+      daysStreak: (days: number) =>
+        `${days} day${days === 1 ? '' : 's'} streak`,
       aboveGoal: 'Above goal',
       belowGoal: 'Below goal',
       onGoal: 'On goal',
@@ -526,11 +545,70 @@ export const translations: Record<AppLanguage, TranslationSchema> = {
       endDate: 'End Date',
       apply: 'Apply',
       invalidDate: 'Invalid date (use YYYY-MM-DD or MM/DD/YYYY)',
-      singleDateHint: 'For a single day, set both start and end to the same date.',
+      singleDateHint:
+        'For a single day, set both start and end to the same date.',
       emptyTitle: 'Insufficient data',
-      emptySubtitle: 'Start logging your meals and hydration to view trends and charts.',
+      emptySubtitle:
+        'Start logging your meals and hydration to view trends and charts.',
     },
   },
 };
 
 export type Translations = TranslationSchema;
+
+export const v2Translations = {
+  pt: {
+    nutrients: {
+      proteinG: 'Proteína (g)',
+      caloriesKcal: 'Energia (kcal)',
+      carbG: 'Carboidratos (g)',
+      fatG: 'Gorduras totais (g)',
+      fiberG: 'Fibras (g)',
+      saturatedFatG: 'Gordura saturada (g)',
+      sodiumMg: 'Sódio (mg)',
+    },
+    sources: {
+      manual: 'Manual',
+      label: 'Rótulo',
+      food_table: 'Tabela alimentar',
+      ai: 'Estimativa de IA',
+    },
+    unknown: 'Vazio = desconhecido; zero = zero conhecido.',
+    saved: 'Salvo no aparelho',
+    liquids: 'Líquidos registrados',
+    partial: 'Dados incompletos',
+    noLogs: 'Sem registros',
+    confirmed: 'Dia confirmado',
+    open: 'Dia em aberto',
+    details: 'Detalhes',
+    save: 'Salvar',
+    cancel: 'Cancelar',
+  },
+  en: {
+    nutrients: {
+      proteinG: 'Protein (g)',
+      caloriesKcal: 'Energy (kcal)',
+      carbG: 'Carbohydrates (g)',
+      fatG: 'Total fat (g)',
+      fiberG: 'Fiber (g)',
+      saturatedFatG: 'Saturated fat (g)',
+      sodiumMg: 'Sodium (mg)',
+    },
+    sources: {
+      manual: 'Manual',
+      label: 'Label',
+      food_table: 'Food table',
+      ai: 'AI estimate',
+    },
+    unknown: 'Empty = unknown; zero = known zero.',
+    saved: 'Saved on this device',
+    liquids: 'Logged fluids',
+    partial: 'Incomplete data',
+    noLogs: 'No logs',
+    confirmed: 'Day confirmed',
+    open: 'Day open',
+    details: 'Details',
+    save: 'Save',
+    cancel: 'Cancel',
+  },
+} as const;

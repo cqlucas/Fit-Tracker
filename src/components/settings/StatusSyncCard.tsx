@@ -18,14 +18,22 @@ export interface StatusSyncCardProps {
   isPt?: boolean;
 }
 
-type SyncVisualMode = 'local_only' | 'offline' | 'syncing' | 'error' | 'synced';
+type SyncVisualMode =
+  'local_only' | 'offline' | 'syncing' | 'error' | 'pending' | 'synced';
 
 export function StatusSyncCard({ isPt: propIsPt }: StatusSyncCardProps) {
   const { t: contextT, isPt: contextIsPt } = useLanguage();
   const isPt = propIsPt ?? contextIsPt;
-  const t = propIsPt !== undefined ? (isPt ? translations.pt : translations.en) : contextT;
+  const t =
+    propIsPt !== undefined
+      ? isPt
+        ? translations.pt
+        : translations.en
+      : contextT;
 
-  const [syncState, setSyncState] = useState<SyncState>(() => syncEngine.getState());
+  const [syncState, setSyncState] = useState<SyncState>(() =>
+    syncEngine.getState(),
+  );
 
   // Rhythmic pulse for the status dot
   const [pulseAnim] = useState(() => new Animated.Value(0.4));
@@ -91,7 +99,13 @@ export function StatusSyncCard({ isPt: propIsPt }: StatusSyncCardProps) {
     if (!syncState.isEnabled) return 'local_only';
     if (!syncState.isOnline) return 'offline';
     if (syncState.isSyncing) return 'syncing';
-    if (syncState.lastResult && !syncState.lastResult.ok) return 'error';
+    if (
+      syncState.conflicts > 0 ||
+      syncState.pending > 0 ||
+      !syncState.lastResult
+    )
+      return 'pending';
+    if (!syncState.lastResult.ok) return 'error';
     return 'synced';
   }, [syncState]);
 
@@ -106,6 +120,17 @@ export function StatusSyncCard({ isPt: propIsPt }: StatusSyncCardProps) {
           badgeText: t.settings.syncStatusSyncing,
           description: t.settings.syncDescSyncing,
           Icon: RefreshCw,
+        };
+      case 'pending':
+        return {
+          accentColor: colors.outline,
+          badgeBg: colors.surfaceHigh,
+          badgeBorder: colors.strokeCrisp,
+          badgeText: isPt ? 'Pendente' : 'Pending',
+          description: isPt
+            ? `${syncState.pending} alterações locais; ${syncState.conflicts} conflitos. Salvo no aparelho não significa copiado para a nuvem.`
+            : `${syncState.pending} local changes; ${syncState.conflicts} conflicts. Saved locally does not mean copied to the cloud.`,
+          Icon: Database,
         };
       case 'offline':
         return {
@@ -148,11 +173,20 @@ export function StatusSyncCard({ isPt: propIsPt }: StatusSyncCardProps) {
           Icon: CheckCircle2,
         };
     }
-  }, [mode, t, syncState.lastResult]);
+  }, [
+    mode,
+    t,
+    syncState.lastResult,
+    syncState.pending,
+    syncState.conflicts,
+    isPt,
+  ]);
 
   // Formatted last sync time string
   const formattedLastSync = useMemo(() => {
-    const isoString = syncState.lastResult?.finishedAt;
+    const isoString = syncState.lastResult?.ok
+      ? syncState.lastResult.finishedAt
+      : null;
     if (!isoString) return t.settings.syncNever;
     try {
       const date = new Date(isoString);
@@ -177,14 +211,16 @@ export function StatusSyncCard({ isPt: propIsPt }: StatusSyncCardProps) {
     } catch {
       return t.settings.syncNever;
     }
-  }, [syncState.lastResult?.finishedAt, t]);
+  }, [syncState.lastResult, t]);
 
   const handleManualSync = () => {
-    if (!syncState.isEnabled || syncState.isSyncing || !syncState.isOnline) return;
+    if (!syncState.isEnabled || syncState.isSyncing || !syncState.isOnline)
+      return;
     void syncEngine.syncNow();
   };
 
-  const canTriggerSync = syncState.isEnabled && syncState.isOnline && !syncState.isSyncing;
+  const canTriggerSync =
+    syncState.isEnabled && syncState.isOnline && !syncState.isSyncing;
 
   const StatusIcon = visualConfig.Icon;
 
@@ -200,10 +236,15 @@ export function StatusSyncCard({ isPt: propIsPt }: StatusSyncCardProps) {
                 backgroundColor: visualConfig.badgeBg,
                 borderColor: visualConfig.badgeBorder,
               },
-            ]}>
+            ]}
+          >
             <StatusIcon size={16} color={visualConfig.accentColor} />
           </View>
-          <Typography variant="labelSm" color={colors.onSurface} style={styles.title}>
+          <Typography
+            variant="labelSm"
+            color={colors.onSurface}
+            style={styles.title}
+          >
             {t.settings.syncStatusTitle}
           </Typography>
         </View>
@@ -216,7 +257,8 @@ export function StatusSyncCard({ isPt: propIsPt }: StatusSyncCardProps) {
               backgroundColor: visualConfig.badgeBg,
               borderColor: visualConfig.badgeBorder,
             },
-          ]}>
+          ]}
+        >
           <Animated.View
             style={[
               styles.pulseDot,
@@ -228,20 +270,32 @@ export function StatusSyncCard({ isPt: propIsPt }: StatusSyncCardProps) {
           />
           <Typography
             variant="unitCaption"
-            style={[styles.statusBadgeText, { color: visualConfig.accentColor }]}>
+            style={[
+              styles.statusBadgeText,
+              { color: visualConfig.accentColor },
+            ]}
+          >
             {visualConfig.badgeText}
           </Typography>
         </View>
       </View>
 
       {/* Descrição contextual explicativa */}
-      <Typography variant="labelSm" color={colors.onSurfaceVariant} style={styles.description}>
+      <Typography
+        variant="labelSm"
+        color={colors.onSurfaceVariant}
+        style={styles.description}
+      >
         {visualConfig.description}
       </Typography>
 
       {/* Linha Inferior: Telemetria de Última Sincronização e Ação Manual */}
       <View style={styles.footerRow}>
-        <Typography variant="unitCaption" color={colors.outline} style={styles.timestampText}>
+        <Typography
+          variant="unitCaption"
+          color={colors.outline}
+          style={styles.timestampText}
+        >
           {t.settings.syncLastSynced(formattedLastSync)}
         </Typography>
 
@@ -255,13 +309,15 @@ export function StatusSyncCard({ isPt: propIsPt }: StatusSyncCardProps) {
               styles.syncButton,
               pressed && canTriggerSync && styles.syncButtonPressed,
               !canTriggerSync && styles.syncButtonDisabled,
-            ]}>
+            ]}
+          >
             <Animated.View
               style={
                 syncState.isSyncing
                   ? { transform: [{ rotate: spinInterpolation }] }
                   : undefined
-              }>
+              }
+            >
               <RefreshCw
                 size={13}
                 color={canTriggerSync ? colors.primary : colors.outlineVariant}
@@ -270,7 +326,8 @@ export function StatusSyncCard({ isPt: propIsPt }: StatusSyncCardProps) {
             <Typography
               variant="unitCaption"
               color={canTriggerSync ? colors.primary : colors.outlineVariant}
-              style={styles.syncButtonText}>
+              style={styles.syncButtonText}
+            >
               {syncState.isSyncing
                 ? t.settings.syncStatusSyncing
                 : t.settings.syncTapToSync}

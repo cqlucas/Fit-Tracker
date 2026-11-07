@@ -1,7 +1,17 @@
 import { addDatabaseChangeListener } from 'expo-sqlite';
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+} from 'react';
 
-import { translations, type AppLanguage, type Translations } from '@/i18n/translations';
+import {
+  translations,
+  type AppLanguage,
+  type Translations,
+} from '@/i18n/translations';
 import { goalsRepository } from '@/repositories/goals.repository';
 
 interface LanguageContextValue {
@@ -27,15 +37,20 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
         }
       })
       .catch((err) => {
-        if (__DEV__) console.warn('[LanguageProvider] Erro ao carregar idioma:', err);
+        if (__DEV__)
+          console.warn('[LanguageProvider] Erro ao carregar idioma:', err);
       });
 
     // Reage instantaneamente a alterações locais no SQLite ou sync
-    const sub = addDatabaseChangeListener(() => {
+    const sub = addDatabaseChangeListener(({ tableName }) => {
+      if (tableName !== 'user_goals') return;
       goalsRepository
         .get()
         .then((goals) => {
-          if (isMounted && (goals.language === 'pt' || goals.language === 'en')) {
+          if (
+            isMounted &&
+            (goals.language === 'pt' || goals.language === 'en')
+          ) {
             setLanguageState(goals.language);
           }
         })
@@ -54,7 +69,8 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     try {
       await goalsRepository.update({ language: newLang });
     } catch (err) {
-      if (__DEV__) console.warn('[LanguageProvider] Erro ao salvar idioma:', err);
+      if (__DEV__)
+        console.warn('[LanguageProvider] Erro ao salvar idioma:', err);
     }
   }, []);
 
@@ -65,7 +81,11 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     setLanguage,
   };
 
-  return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;
+  return (
+    <LanguageContext.Provider value={value}>
+      {children}
+    </LanguageContext.Provider>
+  );
 }
 
 export function useLanguage(): LanguageContextValue {

@@ -1,0 +1,3 @@
+[functions.analyze-food]
+# The function validates the bearer token with auth.getUser; supports current signing keys.
+verify_jwt = false

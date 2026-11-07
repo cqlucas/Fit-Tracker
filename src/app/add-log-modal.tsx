@@ -1,13 +1,10 @@
 import { router } from 'expo-router';
 import { ChevronRight, Droplets, Utensils, X } from 'lucide-react-native';
 import React from 'react';
-import {
-  Pressable,
-  StyleSheet,
-  View,
-} from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { Action } from '@/components/ui/Form';
 import { Typography } from '@/components/ui/Typography';
 import { useLanguage } from '@/context/LanguageContext';
 import { colors, radii, shadows, spacing } from '@/theme/tokens';
@@ -19,7 +16,9 @@ export default function AddLogModal() {
     router.back();
   };
 
-  const handleNavigate = (path: '/add-water' | '/add-food') => {
+  const handleNavigate = (
+    path: '/add-water' | '/add-food' | '/add-routine',
+  ) => {
     router.replace(path);
   };
 
@@ -43,7 +42,11 @@ export default function AddLogModal() {
         {/* Modal Header */}
         <View style={styles.header}>
           <View style={styles.headerTextGroup}>
-            <Typography variant="unitCaption" color={colors.primary} style={styles.tagline}>
+            <Typography
+              variant="unitCaption"
+              color={colors.primary}
+              style={styles.tagline}
+            >
               {isPt ? 'REGISTRO RÁPIDO' : 'FAST TRACKING'}
             </Typography>
             <Typography variant="headlineSm" style={styles.title}>
@@ -55,7 +58,11 @@ export default function AddLogModal() {
             onPress={handleClose}
             accessibilityRole="button"
             accessibilityLabel={isPt ? 'Fechar' : 'Close'}
-            style={({ pressed }) => [styles.closeButton, pressed && styles.pressed]}>
+            style={({ pressed }) => [
+              styles.closeButton,
+              pressed && styles.pressed,
+            ]}
+          >
             <X size={18} color={colors.onSurfaceVariant} />
           </Pressable>
         </View>
@@ -71,27 +78,53 @@ export default function AddLogModal() {
               styles.card,
               shadows.card,
               pressed && styles.cardPressed,
-            ]}>
+            ]}
+          >
             {/* Glow de fundo sutil */}
-            <View style={[styles.glowBackdrop, { backgroundColor: `${colors.secondary}10` }]} />
+            <View
+              style={[
+                styles.glowBackdrop,
+                { backgroundColor: `${colors.secondary}10` },
+              ]}
+            />
 
             <View style={styles.cardLeft}>
-              <View style={[styles.iconBox, { backgroundColor: `${colors.secondary}18` }]}>
-                <Droplets size={24} color={colors.secondary} strokeWidth={2.4} />
+              <View
+                style={[
+                  styles.iconBox,
+                  { backgroundColor: `${colors.secondary}18` },
+                ]}
+              >
+                <Droplets
+                  size={24}
+                  color={colors.secondary}
+                  strokeWidth={2.4}
+                />
               </View>
               <View style={styles.cardInfo}>
                 <View style={styles.cardTitleRow}>
                   <Typography variant="headlineSm" style={styles.cardTitle}>
                     {isPt ? 'Registrar Água' : 'Add Liquid'}
                   </Typography>
-                  <View style={[styles.badge, { backgroundColor: `${colors.secondary}20` }]}>
+                  <View
+                    style={[
+                      styles.badge,
+                      { backgroundColor: `${colors.secondary}20` },
+                    ]}
+                  >
                     <Typography variant="unitCaption" color={colors.secondary}>
                       + ML
                     </Typography>
                   </View>
                 </View>
-                <Typography variant="bodyMd" color={colors.onSurfaceVariant} style={styles.cardSubtitle}>
-                  {isPt ? 'Água pura, chá, eletrólitos ou shake' : 'Water, tea, electrolytes, shake'}
+                <Typography
+                  variant="bodyMd"
+                  color={colors.onSurfaceVariant}
+                  style={styles.cardSubtitle}
+                >
+                  {isPt
+                    ? 'Água e bebidas sem calorias; vitaminas em refeição'
+                    : 'Water and noncaloric drinks; smoothies as meals'}
                 </Typography>
               </View>
             </View>
@@ -108,12 +141,23 @@ export default function AddLogModal() {
               styles.card,
               shadows.card,
               pressed && styles.cardPressed,
-            ]}>
+            ]}
+          >
             {/* Glow de fundo sutil */}
-            <View style={[styles.glowBackdrop, { backgroundColor: `${colors.primary}10` }]} />
+            <View
+              style={[
+                styles.glowBackdrop,
+                { backgroundColor: `${colors.primary}10` },
+              ]}
+            />
 
             <View style={styles.cardLeft}>
-              <View style={[styles.iconBox, { backgroundColor: `${colors.primary}18` }]}>
+              <View
+                style={[
+                  styles.iconBox,
+                  { backgroundColor: `${colors.primary}18` },
+                ]}
+              >
                 <Utensils size={24} color={colors.primary} strokeWidth={2.4} />
               </View>
               <View style={styles.cardInfo}>
@@ -121,14 +165,25 @@ export default function AddLogModal() {
                   <Typography variant="headlineSm" style={styles.cardTitle}>
                     {isPt ? 'Registrar Comida' : 'Add Food'}
                   </Typography>
-                  <View style={[styles.badge, { backgroundColor: `${colors.primary}20` }]}>
+                  <View
+                    style={[
+                      styles.badge,
+                      { backgroundColor: `${colors.primary}20` },
+                    ]}
+                  >
                     <Typography variant="unitCaption" color={colors.primary}>
                       + PROT & KCAL
                     </Typography>
                   </View>
                 </View>
-                <Typography variant="bodyMd" color={colors.onSurfaceVariant} style={styles.cardSubtitle}>
-                  {isPt ? 'Refeições completas, foto com IA e lanches' : 'Full meals, AI photo scan & snacks'}
+                <Typography
+                  variant="bodyMd"
+                  color={colors.onSurfaceVariant}
+                  style={styles.cardSubtitle}
+                >
+                  {isPt
+                    ? 'Refeições completas, foto com IA e lanches'
+                    : 'Full meals, AI photo scan & snacks'}
                 </Typography>
               </View>
             </View>
@@ -137,12 +192,25 @@ export default function AddLogModal() {
           </Pressable>
         </View>
 
+        <Action
+          label={
+            isPt
+              ? 'Peso, treino e confirmação do dia'
+              : 'Weight, training and daily check-in'
+          }
+          secondary
+          onPress={() => handleNavigate('/add-routine')}
+        />
         {/* Botão de Cancelar */}
         <Pressable
           onPress={handleClose}
           accessibilityRole="button"
           accessibilityLabel={isPt ? 'Cancelar' : 'Cancel'}
-          style={({ pressed }) => [styles.cancelButton, pressed && styles.pressed]}>
+          style={({ pressed }) => [
+            styles.cancelButton,
+            pressed && styles.pressed,
+          ]}
+        >
           <Typography variant="labelMd" color={colors.outline} center>
             {isPt ? 'Cancelar' : 'Cancel'}
           </Typography>
